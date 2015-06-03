@@ -5,7 +5,7 @@
 
 -- | In addition to the entities below, this module provides the following
 -- 'UUID' instances: 'PersistField', 'PersistFieldSql', 'FromJSON', 'ToJSON',
--- 'JSONSchema', and 'PathPiece'.
+-- 'JSONSchema', 'PathPiece', and 'Info'.
 module Lambdatrade ( DerivedData(..)
                    , derivedType
                    , mkGenericJSON
@@ -34,12 +34,14 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import System.Environment
 import Web.PathPieces
+
 import Data.ByteString (ByteString)
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.List as L
 import qualified Data.Text as TS
+import qualified Rest.Types.Info as Rest
 import qualified Data.Text.Encoding as TS
 
 instance PersistField UUID where
@@ -64,6 +66,9 @@ instance JSONSchema UUID where
 instance PathPiece UUID where
     fromPathPiece = fromString . TS.unpack
     toPathPiece = TS.pack . toString
+
+instance Rest.Info UUID where
+    describe _ = "uuid"
 
 -- | Acquires the database password (from the @DB_PASSWORD@ environment
 -- variable) and creates a PostgreSQL connection pool with the specified number
