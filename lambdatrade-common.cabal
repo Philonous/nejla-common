@@ -30,6 +30,7 @@ library
                     template-haskell,
                     text,
                     transformers,
+                    unordered-containers,
                     uuid
   hs-source-dirs:   source
   default-language: Haskell2010

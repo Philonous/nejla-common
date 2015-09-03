@@ -1,12 +1,16 @@
 -- Copyright © 2014-2015 Lambdatrade AB. All rights reserved.
 
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 -- | In addition to the entities below, this module provides the following
 -- 'UUID' instances: 'PersistField', 'PersistFieldSql', 'FromJSON', 'ToJSON',
 -- 'JSONSchema', 'PathPiece', and 'Info'.
 module Lambdatrade ( DerivedData(..)
+                   , WithField(..)
                    , derivedType
                    , mkGenericJSON
                    , mkJsonType
@@ -21,7 +25,6 @@ import Data.Aeson
 import Data.Char
 import Data.Data
 import Data.Default
-import Data.JSON.Schema
 import Data.Maybe
 import Data.Monoid
 import Data.UUID
@@ -30,6 +33,7 @@ import Database.Persist.Sql
 import Database.Persist.TH
 import Generics.Generic.Aeson
 import GHC.Generics
+import GHC.TypeLits
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import System.Environment
@@ -39,6 +43,8 @@ import Data.ByteString (ByteString)
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.HashMap.Strict as HMap
+import qualified Data.JSON.Schema as Schema
 import qualified Data.List as L
 import qualified Data.Text as TS
 import qualified Rest.Types.Info as Rest
@@ -60,8 +66,8 @@ instance ToJSON UUID where
 instance FromJSON UUID where
     parseJSON = maybe mzero return . fromString <=< parseJSON
 
-instance JSONSchema UUID where
-    schema uuid = schema $ fmap (TS.pack . show) uuid
+instance Schema.JSONSchema UUID where
+    schema uuid = Schema.schema $ fmap (TS.pack . show) uuid
 
 instance PathPiece UUID where
     fromPathPiece = fromString . TS.unpack
@@ -103,8 +109,8 @@ mkGenericJSON tp = do -- TODO: Rename to "mkGenericJson", probably.
                  parseJSON = gparseJsonWithSettings $settings |]
     tj <- [d| instance ToJSON $tp where
                  toJSON = gtoJsonWithSettings $settings |]
-    sc <- [d| instance JSONSchema  $tp where
-                 schema = gSchemaWithSettings $settings |]
+    sc <- [d| instance Schema.JSONSchema  $tp where
+                 schema = Schema.gSchemaWithSettings $settings |]
     return . concat $ [ fj
                       , tj
                       , sc
@@ -277,3 +283,50 @@ upcase (c:cs) = toUpper c : cs
 -- Used by derivedType{,'}. Not exported.
 notIn :: Eq a => a -> [a] -> Bool
 notIn x xs = not (x `elem` xs)
+
+-- | Extends a given type with an extra field and derives 'FromJSON', 'ToJSON'
+-- and 'JSONSchema' instances.
+--
+-- Usage: WithField [name of field as a string] [type of field] [type to extend]
+
+data WithField (name :: Symbol) fieldType baseType =
+    WithField { withFieldField :: fieldType
+              , withFieldBase :: baseType
+              } deriving (Show)
+
+instance (KnownSymbol name, ToJSON fieldType, ToJSON baseType) =>
+         ToJSON (WithField name fieldType baseType) where
+  toJSON wf =
+      let fName = TS.pack $ symbolVal (Proxy :: Proxy name)
+      in case toJSON $ withFieldBase wf of
+               Object o ->
+                   case toJSON $ withFieldField wf of
+                    Null -> Object o
+                    v -> Object $ o <> HMap.singleton fName v
+               _ -> error "WithField.toJSON: base field does not yield object"
+
+instance (KnownSymbol name, FromJSON fieldType, FromJSON baseType) =>
+         FromJSON (WithField name fieldType baseType) where
+  parseJSON = withObject "object" $ \o -> do
+      let fName = TS.pack $ symbolVal (Proxy :: Proxy name)
+      fv <- o .:? fName
+      f <- case fv of
+       Nothing -> parseJSON Null
+       Just v -> parseJSON v
+      b <- parseJSON (Object $ HMap.delete fName o)
+      return $ WithField{ withFieldField = f
+                        , withFieldBase = b
+                        }
+
+instance ( KnownSymbol name
+         , Schema.JSONSchema fieldType
+         , Schema.JSONSchema baseType
+         ) => Schema.JSONSchema (WithField name fieldType baseType) where
+  schema prx =
+    let fName = TS.pack $ symbolVal (Proxy :: Proxy name)
+    in case Schema.schema (withFieldBase <$> prx) of
+         Schema.Object fs
+             -> Schema.Object (fs ++ [Schema.Field fName False
+                                      (Schema.schema
+                                       (withFieldBase <$> prx))])
+         _ -> Schema.Any
