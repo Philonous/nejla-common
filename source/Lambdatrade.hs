@@ -9,12 +9,14 @@
 -- | In addition to the entities below, this module provides the following
 -- 'UUID' instances: 'PersistField', 'PersistFieldSql', 'FromJSON', 'ToJSON',
 -- 'JSONSchema', 'PathPiece', and 'Info'.
-module Lambdatrade ( DerivedData(..)
+module Lambdatrade ( module Lambdatrade.Persistence
+                   , DerivedData(..)
                    , WithField(..)
                    , derivedType
                    , mkGenericJSON
                    , mkJsonType
                    , withPool
+
                    ) where
 
 import Control.Applicative
@@ -49,6 +51,8 @@ import qualified Data.List as L
 import qualified Data.Text as TS
 import qualified Rest.Types.Info as Rest
 import qualified Data.Text.Encoding as TS
+
+import Lambdatrade.Persistence
 
 instance PersistField UUID where
     toPersistValue = toPersistValue . BS.concat . BSL.toChunks . toByteString
