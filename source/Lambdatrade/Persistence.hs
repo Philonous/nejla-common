@@ -17,10 +17,19 @@
 module Lambdatrade.Persistence
   ( -- * SQL Monad
     Privilege (..)
-  , SQL (..)
+  , TransactionLevel
+  , setTransactionLevel
+  , , SQL (..)
   , unprivileged
   , db
   , db'
+  , runSQL
+  , readCommitted
+  , serializeable
+  , repeatableRead
+  , runSQL'
+  , withSerializeable
+  , withReadCommited
   -- * Persistence Helpers
   , checkmarkToBool
   , boolToCheckmark
@@ -107,22 +116,15 @@ setTransactionLevel l = do
 
 genSingletons [''Privilege, ''TransactionLevel]
 
-serializeable :: Sing 'Serializeable
-serializeable = SSerializeable
-
-repeatableRead :: Sing 'RepeatableRead
-repeatableRead = SRepeatableRead
-
-readCommitted :: Sing 'ReadCommitted
-readCommitted = SReadCommitted
-
 -- | An SQL action running in a privilege context @r@
 newtype SQL (r :: Privilege) (l :: TransactionLevel)
             a = SQL {unSQL :: ReaderT SqlBackend IO a}
                    deriving (Functor, Applicative, Monad, MonadIO
                             , MonadThrow, MonadCatch)
 
-runSQL :: Sing l
+-- | run an SQL transaction
+runSQL :: Sing l -- ^ mode to run the transaction in (see 'serializeable',
+                 -- 'repeatableRead' and 'readCommitted')
        -> ConnectionPool
        -> SQL p l a
        -> IO a
@@ -130,6 +132,21 @@ runSQL tLevel pool ((SQL m) :: SQL p l a) = flip runSqlPool pool $ do
     setTransactionLevel (fromSing tLevel)
     m
 
+-- | Run the transaction in serializeable mode
+serializeable :: Sing 'Serializeable
+serializeable = SSerializeable
+
+-- | Run the transaction in repeatable read mode
+repeatableRead :: Sing 'RepeatableRead
+repeatableRead = SRepeatableRead
+
+-- | Run the transaction in read committed mode
+readCommitted :: Sing 'ReadCommitted
+readCommitted = SReadCommitted
+
+
+-- | Like runSQL, but derive the mode from the type of the transaction (if it is
+-- monomorphic)
 runSQL' :: SingI l =>
            ConnectionPool
         -> SQL p l a
@@ -159,8 +176,8 @@ withSerializeable :: SQL p l a -> SQL p Serializeable a
 withSerializeable (SQL m) = SQL m
 
 -- | Annotate an operation as not requiring serializability
-wiithReadCommited :: SQL p ReadCommitted a -> SQL p ReadCommitted a
-wiithReadCommited m = m
+withReadCommited :: SQL p ReadCommitted a -> SQL p ReadCommitted a
+withReadCommited m = m
 
 --------------------------------------------------------------------------------
 -- Persistence Helpers ---------------------------------------------------------
