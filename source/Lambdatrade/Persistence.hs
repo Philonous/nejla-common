@@ -19,7 +19,7 @@ module Lambdatrade.Persistence
     Privilege (..)
   , TransactionLevel
   , setTransactionLevel
-  , , SQL (..)
+  , SQL (..)
   , unprivileged
   , db
   , db'
@@ -67,6 +67,7 @@ module Lambdatrade.Persistence
   , onForeignKey
   ) where
 
+import           Control.Applicative
 import qualified Control.Exception as Ex
 import qualified Control.Lens as L
 import           Control.Monad.Catch
