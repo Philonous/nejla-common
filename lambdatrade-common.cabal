@@ -22,6 +22,7 @@ library
                   , data-default
                   , esqueleto
                   , exceptions >= 0.8
+                  , http-api-data
                   , generic-aeson
                   , json-schema
                   , lens

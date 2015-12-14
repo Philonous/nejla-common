@@ -8,15 +8,17 @@
 
 -- | In addition to the entities below, this module provides the following
 -- 'UUID' instances: 'PersistField', 'PersistFieldSql', 'FromJSON', 'ToJSON',
--- 'JSONSchema', 'PathPiece', and 'Info'.
+-- 'JSONSchema', 'PathPiece', 'Info' as well as 'FromHttpApiData' and
+-- 'ToHttpApiData'.
 module Lambdatrade ( module Lambdatrade.Persistence
                    , DerivedData(..)
                    , WithField(..)
                    , derivedType
+                   , formatUTC
                    , mkGenericJSON
                    , mkJsonType
+                   , parseUTC
                    , withPool
-
                    ) where
 
 import Control.Applicative
@@ -29,6 +31,8 @@ import Data.Data
 import Data.Default
 import Data.Maybe
 import Data.Monoid
+import Data.Time.Clock
+import Data.Time.Format
 import Data.UUID
 import Database.Persist.Postgresql
 import Database.Persist.Sql
@@ -39,6 +43,7 @@ import GHC.TypeLits
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import System.Environment
+import Web.HttpApiData
 import Web.PathPieces
 
 import Data.ByteString (ByteString)
@@ -79,6 +84,15 @@ instance PathPiece UUID where
 
 instance Rest.Info UUID where
     describe _ = "uuid"
+
+instance ToHttpApiData UUID where
+    toUrlPiece = toPathPiece
+
+instance FromHttpApiData UUID where
+    parseUrlPiece txt =
+        case fromPathPiece txt of
+         Nothing -> Left $ "Invalid UUID: " <> txt
+         Just uuid -> Right uuid
 
 -- | Acquires the database password (from the @DB_PASSWORD@ environment
 -- variable) and creates a PostgreSQL connection pool with the specified number
@@ -334,3 +348,13 @@ instance ( KnownSymbol name
                                       (Schema.schema
                                        (withFieldBase <$> prx))])
          _ -> Schema.Any
+
+-- TODO: Document this.
+formatUTC :: UTCTime -> String
+formatUTC = formatTime defaultTimeLocale "%FT%T%QZ"
+
+-- TODO: Document this.
+parseUTC :: String -> Maybe UTCTime
+parseUTC t= parseTimeM True defaultTimeLocale "%FT%T%QZ" t
+            <|> parseTimeM True defaultTimeLocale "%FT%T%Q%z" t
+            <|> parseTimeM True defaultTimeLocale "%F" t
