@@ -20,7 +20,7 @@ import           Network.Wai.Parse
 --
 -- Example usage with rest-core:
 --
--- >>>  Warp.run port $ multipartHandlerOverride "POST"
+-- >>>  Warp.run port $ multipartHandlerOverride "POST" ["v1.0.0","frob","upload"]
 -- >>>                $ apiToApplication run api
 --
 multipartHandlerOverride :: Method
