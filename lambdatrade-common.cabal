@@ -22,8 +22,9 @@ library
                   , data-default
                   , esqueleto
                   , exceptions >= 0.8
-                  , http-api-data
                   , generic-aeson
+                  , http-api-data
+                  , http-types >= 0.9
                   , json-schema
                   , lens
                   , monad-logger
@@ -32,6 +33,7 @@ library
                   , persistent
                   , persistent-postgresql
                   , persistent-template
+                  , resourcet
                   , rest-types
                   , singletons >= 1.1
                   , template-haskell
@@ -40,5 +42,7 @@ library
                   , transformers
                   , unordered-containers
                   , uuid
+                  , wai
+                  , wai-extra
   hs-source-dirs:   source
   default-language: Haskell2010
