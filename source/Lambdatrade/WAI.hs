@@ -36,8 +36,14 @@ multipartHandlerOverride method path app req sendRes
           let filename = case files of
                           [] -> ""
                           ((_, FileInfo{fileContent = fn}):_) -> fn
-              req' = req{requestBody = return . Text.encodeUtf8
-                                              $ Text.pack filename}
+              req' = req{ requestBody = return . Text.encodeUtf8
+                                               $ Text.pack filename
+                        , requestHeaders = replaceHeader "Content-Type"
+                                           "text/plain" $ requestHeaders req
+                        }
 
           liftIO $ app req' sendRes
     | otherwise = app req sendRes
+  where
+    replaceHeader name value headers =
+        (name, value) : filter ((/= name) . fst) headers
