@@ -6,6 +6,7 @@ import           Control.Monad.Trans
 import           Control.Monad.Trans.Resource
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
+import           Data.IORef
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -36,8 +37,8 @@ multipartHandlerOverride method path app req sendRes
           let filename = case files of
                           [] -> ""
                           ((_, FileInfo{fileContent = fn}):_) -> fn
-              req' = req{ requestBody = return . Text.encodeUtf8
-                                               $ Text.pack filename
+          bodyRef <- liftIO . newIORef . Text.encodeUtf8 $ Text.pack filename
+          let req' = req{ requestBody = readRef bodyRef
                         , requestHeaders = replaceHeader "Content-Type"
                                            "text/plain" $ requestHeaders req
                         }
@@ -47,3 +48,7 @@ multipartHandlerOverride method path app req sendRes
   where
     replaceHeader name value headers =
         (name, value) : filter ((/= name) . fst) headers
+    readRef ref = do
+      res <- readIORef ref
+      writeIORef ref BS.empty
+      return res
