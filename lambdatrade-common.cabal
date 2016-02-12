@@ -16,6 +16,7 @@ cabal-version:      >=1.10
 library
   exposed-modules:  Lambdatrade
                   , Lambdatrade.Persistence
+                  , Lambdatrade.Persistence.Logging
   build-depends:    aeson
                   , base >=4.7 && <5.0
                   , bytestring
