@@ -19,6 +19,8 @@ library
                   , Lambdatrade.Persistence.Logging
   build-depends:    aeson
                   , base >=4.7 && <5.0
+		  -- https://github.com/aslatter/uuid/issues/19
+                  , binary <0.8
                   , bytestring
                   , data-default
                   , esqueleto

@@ -6,7 +6,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Persistence.Transactions.Logging where
+module Lambdatrade.Persistence.Logging where
 
 import           Control.Applicative
 import qualified Control.Exception as Ex
