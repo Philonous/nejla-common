@@ -63,17 +63,14 @@ logPublicCalls logRequest logResponse app request' respond = do
     now <- getCurrentTime
     let bLength = readMaybe . Text.unpack . Text.decodeUtf8
                     =<< List.lookup "content-length" (Wai.requestHeaders request')
-    (reqB, body) <- case bLength of
-        Just l | l < 2048 -> do
-                     body <- getBody (Wai.requestBody request') BS.empty
-                     bdRef <- newIORef body
-                     let rBody = do
-                             bd <- readIORef bdRef
-                             writeIORef bdRef BS.empty
-                             return  bd
-                     return (rBody, body)
-        _ -> return ( Wai.requestBody request'
-                    , "<body length unknown or greater 2048 bytes>")
+    (reqB, body) <- do
+        body <- getBody (Wai.requestBody request') BS.empty
+        bdRef <- newIORef body
+        let rBody = do
+                bd <- readIORef bdRef
+                writeIORef bdRef BS.empty
+                return  bd
+        return (rBody, body)
     let request = request'{Wai.requestBody = reqB}
     reqId <- logRequest
                RequestLog
