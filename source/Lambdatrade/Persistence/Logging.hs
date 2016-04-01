@@ -99,8 +99,6 @@ logPublicCalls logRequest app request' respond = do
     now <- getCurrentTime
     -- We can't use (Wai.strictRequestBody request) because that consumes the
     -- request body. TODO: Figure this out
-    let bLength = readMaybe . Text.unpack . Text.decodeUtf8
-                    =<< List.lookup "content-length" (Wai.requestHeaders request')
     (reqB, reqBody) <- do
         body <- getBody (Wai.requestBody request') BS.empty
         bdRef <- newIORef body
@@ -134,7 +132,6 @@ logPublicCalls logRequest app request' respond = do
         if BS.null chunk
             then return acc
             else getBody nextChunk (acc <> chunk)
-    showText = Text.pack . show
     bst = Text.decodeUtf8With Text.lenientDecode
     responseToText resp = do
       ref <- newIORef []
