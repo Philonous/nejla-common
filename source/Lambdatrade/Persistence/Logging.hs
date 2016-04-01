@@ -1,11 +1,11 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 -- Copyright © 2014-2015 Lambdatrade AB. All rights reserved.
 
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Lambdatrade.Persistence.Logging where
 
@@ -13,6 +13,7 @@ import           Control.Applicative
 import qualified Control.Exception as Ex
 import           Control.Monad
 import qualified Data.Aeson.TH as Aeson
+import qualified Data.Aeson as Aeson
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as BS
@@ -40,10 +41,30 @@ import           System.IO (stderr)
 import           Lambdatrade.Helpers
 
 --------------------------------------------------------------------------------
+-- Logging type class ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+data LogRow = LogRow { logRowTime    :: !UTCTime
+                     , logRowType    :: !Text
+                     , logRowPayload :: !Text
+                     } deriving Show
+
+toLogRow :: LogMessage a => a -> IO LogRow
+toLogRow v = do
+  now <- getCurrentTime
+  return LogRow{ logRowTime    = now
+               , logRowType    = messageType v
+               , logRowPayload = Text.decodeUtf8 . BSL.toStrict $ Aeson.encode v
+               }
+
+class Aeson.ToJSON a => LogMessage a  where
+  messageType :: a -> Text
+
+--------------------------------------------------------------------------------
 -- Request/Response log --------------------------------------------------------
 --------------------------------------------------------------------------------
-data LogHeader = LogHeader{ logHeaderName  :: Text
-                          , logHeaderValue :: Text
+data LogHeader = LogHeader{ logHeaderName  :: !Text
+                          , logHeaderValue :: !Text
                           } deriving (Show, Typeable, Data, Generic)
 
 toLogHeaders :: [(CI.CI ByteString, ByteString)] -> [LogHeader]
@@ -69,6 +90,8 @@ data RequestLog =
 
 Aeson.deriveJSON (aesonTHOptions "requestLog") ''RequestLog
 
+instance LogMessage RequestLog where
+  messageType _ = "request"
 
 logPublicCalls :: (RequestLog -> IO ())
                ->  Wai.Middleware
