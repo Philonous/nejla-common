@@ -15,6 +15,7 @@ cabal-version:      >=1.10
 
 library
   exposed-modules:  Lambdatrade
+                  , Lambdatrade.Helpers
                   , Lambdatrade.Persistence
                   , Lambdatrade.Persistence.Logging
   build-depends:    aeson
@@ -22,6 +23,7 @@ library
 		  -- https://github.com/aslatter/uuid/issues/19
                   , binary <0.8
                   , bytestring
+                  , case-insensitive >= 1.2
                   , data-default
                   , esqueleto
                   , exceptions >= 0.8

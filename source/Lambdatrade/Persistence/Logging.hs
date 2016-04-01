@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 -- Copyright © 2014-2015 Lambdatrade AB. All rights reserved.
@@ -11,10 +12,12 @@ module Lambdatrade.Persistence.Logging where
 import           Control.Applicative
 import qualified Control.Exception as Ex
 import           Control.Monad
+import qualified Data.Aeson.TH as Aeson
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as BS
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.CaseInsensitive as CI
 import           Data.Data
 import           Data.IORef
 import qualified Data.List as List
@@ -34,65 +37,72 @@ import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
 import           System.IO (stderr)
 
+import           Lambdatrade.Helpers
+
 --------------------------------------------------------------------------------
 -- Request/Response log --------------------------------------------------------
 --------------------------------------------------------------------------------
+data LogHeader = LogHeader{ logHeaderName  :: Text
+                          , logHeaderValue :: Text
+                          } deriving (Show, Typeable, Data, Generic)
+
+toLogHeaders :: [(CI.CI ByteString, ByteString)] -> [LogHeader]
+toLogHeaders = fmap toHeader
+  where
+  toHeader (bsn, bsv) = LogHeader{ logHeaderName = tDecode $ CI.foldedCase bsn
+                                 , logHeaderValue = tDecode bsv
+                                 }
+  tDecode = Text.decodeUtf8With Text.lenientDecode
+
+Aeson.deriveJSON (aesonTHOptions "logHeader") ''LogHeader
 
 data RequestLog =
-  RequestLog
-    { requestLogTime    :: !UTCTime
-    , requestLogMethod  :: !Text
-    , requestLogPath    :: ![Text]
-    , requestLogQuery   :: !Text
-    , requestLogHeaders :: !Text
-    , requestLogBody    :: !Text
-    } deriving (Show, Typeable, Data, Generic)
+  RequestLog { requestLogMethod       :: !Text
+             , requestLogPath         :: ![Text]
+             , requestLogQuery        :: !Text
+             , requestLogHeaders      :: ![LogHeader]
+             , requestLogRequestBody  :: !(Maybe Text)
+             , requestLogResponseCode :: !Int
+             , requestLogResponseBody :: !(Maybe Text)
+             , requestLogIP           :: !(Maybe Text)
+             } deriving (Show, Typeable, Data, Generic)
 
-data ResponseLog id =
-  ResponseLog
-    { responseLogTime    :: !UTCTime
-    , responseLogRequest :: !id
-    , responseLogCode    :: !Int
-    , responseLogBody    :: !Text
-    } deriving (Show, Typeable, Data, Generic)
+Aeson.deriveJSON (aesonTHOptions "requestLog") ''RequestLog
 
-logPublicCalls :: (RequestLog -> IO id)
-               -> (ResponseLog id -> IO a)
-               -> Wai.Middleware
-logPublicCalls logRequest logResponse app request' respond = do
+
+logPublicCalls :: (RequestLog -> IO ())
+               ->  Wai.Middleware
+logPublicCalls logRequest app request' respond = do
     now <- getCurrentTime
+    -- We can't use (Wai.strictRequestBody request) because that consumes the
+    -- request body. TODO: Figure this out
     let bLength = readMaybe . Text.unpack . Text.decodeUtf8
                     =<< List.lookup "content-length" (Wai.requestHeaders request')
-    (reqB, body) <- do
+    (reqB, reqBody) <- do
         body <- getBody (Wai.requestBody request') BS.empty
         bdRef <- newIORef body
         let rBody = do
                 bd <- readIORef bdRef
                 writeIORef bdRef BS.empty
                 return  bd
-        return (rBody, body)
+        return (rBody, if BS.null body then Nothing else Just body)
     let request = request'{Wai.requestBody = reqB}
-    reqId <- logRequest
-               RequestLog
-                 { requestLogTime =  now
-                 , requestLogMethod = bst $ Wai.requestMethod request
-                 , requestLogPath = Wai.pathInfo request
-                 , requestLogQuery =  bst $ Wai.rawQueryString request
-                 , requestLogHeaders =
-                     showText $ Wai.requestHeaders request
-                 , requestLogBody = bst body
-                 }
     rr <- app request $ \response -> do
         now' <- getCurrentTime
         body <- responseToText response
-        logResponse
-            ResponseLog
-              { responseLogTime = now
-              , responseLogRequest = reqId
-              , responseLogCode =
-                  HTTP.statusCode $ Wai.responseStatus response
-              , responseLogBody = body
-              }
+        logRequest
+          RequestLog { requestLogMethod       = bst $ Wai.requestMethod request
+                     , requestLogPath         = Wai.pathInfo request
+                     , requestLogQuery        = bst $ Wai.rawQueryString request
+                     , requestLogHeaders      =
+                         toLogHeaders $ Wai.requestHeaders request
+                     , requestLogRequestBody         = bst <$> reqBody
+                     , requestLogResponseCode =
+                         HTTP.statusCode $ Wai.responseStatus response
+                     , requestLogResponseBody = body
+                     , requestLogIP = bst <$> (List.lookup "X-Real-IP"
+                                                $ Wai.requestHeaders request)
+                     }
         respond response
     return rr
   where
@@ -102,20 +112,19 @@ logPublicCalls logRequest logResponse app request' respond = do
             then return acc
             else getBody nextChunk (acc <> chunk)
     showText = Text.pack . show
-    bst = Text.decodeUtf8
+    bst = Text.decodeUtf8With Text.lenientDecode
     responseToText resp = do
       ref <- newIORef []
       case Wai.responseToStream resp of
        (_, _, f) -> f $ \sb -> sb (\chunk -> modifyIORef ref (chunk:))
                                   (return ())
       chunks <- List.reverse <$> readIORef ref
-      return . Text.decodeUtf8With Text.lenientDecode . BSL.toStrict
-             . BS.toLazyByteString
-             $ mconcat chunks
+      let txt = Text.decodeUtf8With Text.lenientDecode
+                . BSL.toStrict . BS.toLazyByteString $ mconcat chunks
+      return $ Just txt
     readMaybe x = case reads x of
                    ((r,_):_) -> Just r
                    [] -> Nothing
-
 
 --------------------------------------------------------------------------------
 -- Critical Event --------------------------------------------------------------
