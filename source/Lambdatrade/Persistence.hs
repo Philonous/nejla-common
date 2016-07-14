@@ -17,7 +17,7 @@
 module Lambdatrade.Persistence
   ( -- * SQL Monad
     Privilege (..)
-  , TransactionLevel
+  , TransactionLevel(..)
   , setTransactionLevel
   , SQL (..)
   , unprivileged
