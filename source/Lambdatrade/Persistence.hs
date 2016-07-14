@@ -1,5 +1,3 @@
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TemplateHaskell #-}
 -- Copyright © 2014-2015 Lambdatrade AB. All rights reserved.
 
 {-# LANGUAGE DataKinds #-}
@@ -7,12 +5,16 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Lambdatrade.Persistence
   ( -- * SQL Monad
@@ -81,15 +83,10 @@ import           Data.Monoid
 import           Data.Singletons
 import           Data.Singletons.TH
 import           Data.Text (Text)
-import qualified Data.Text as Text
 import           Data.Time
-import           Data.Typeable
 import           Data.UUID (UUID)
-import qualified Data.UUID as UUID
 import           Database.Esqueleto as E
 import           Database.Esqueleto.Internal.Sql
-import qualified Database.Persist as P
-import qualified Database.Persist.Sql as P
 import           GHC.Generics
 
 --------------------------------------------------------------------------------
@@ -117,9 +114,15 @@ setTransactionLevel l = do
 
 genSingletons [''Privilege, ''TransactionLevel]
 
+data SqlState st = SqlState { sqlStateConnection :: !SqlBackend
+                            , sqlStateUserState :: !st
+                            } deriving ( Typeable, Generic)
+
+L.makeLensesWith L.camelCaseFields ''SqlState
+
 -- | An SQL action running in a privilege context @r@
-newtype SQL (r :: Privilege) (l :: TransactionLevel)
-            a = SQL {unSQL :: ReaderT SqlBackend IO a}
+newtype SQL (st :: *) (r :: Privilege) (l :: TransactionLevel)
+            a = SQL {unSQL :: ReaderT (SqlState st) IO a}
                    deriving (Functor, Applicative, Monad, MonadIO
                             , MonadThrow, MonadCatch)
 
@@ -127,11 +130,16 @@ newtype SQL (r :: Privilege) (l :: TransactionLevel)
 runSQL :: Sing l -- ^ mode to run the transaction in (see 'serializeable',
                  -- 'repeatableRead' and 'readCommitted')
        -> ConnectionPool
-       -> SQL p l a
+       -> st
+       -> SQL st p l a
        -> IO a
-runSQL tLevel pool ((SQL m) :: SQL p l a) = flip runSqlPool pool $ do
+runSQL tLevel pool ust ((SQL m) :: SQL st p l a) = flip runSqlPool pool $ do
     setTransactionLevel (fromSing tLevel)
-    m
+    con <- ask
+    let st = SqlState { sqlStateConnection = con
+                      , sqlStateUserState = ust
+                      }
+    lift $ runReaderT m st
 
 -- | Run the transaction in serializeable mode
 serializeable :: Sing 'Serializeable
@@ -148,36 +156,33 @@ readCommitted = SReadCommitted
 
 -- | Like runSQL, but derive the mode from the type of the transaction (if it is
 -- monomorphic)
-runSQL' :: SingI l =>
-           ConnectionPool
-        -> SQL p l a
-        -> IO a
+runSQL' :: SingI l => ConnectionPool -> st -> SQL st p l a -> IO a
 runSQL' = runSQL sing
 
 
 -- | Run an unprivileged operation in a privileged context
-unprivileged :: SQL Unprivileged l a -> SQL Privileged l a
+unprivileged :: SQL st 'Unprivileged l a -> SQL st 'Privileged l a
 unprivileged (SQL m) = SQL m
 
 -- | Run a db action in a polymorphic context (i.e. it can be run both in
 -- privileged and in unprivileged contexts)
-db :: ReaderT SqlBackend IO b -> SQL p l b
+db :: ReaderT SqlBackend IO b -> SQL st p l b
 db m = do
-    con <- SQL $ ask
+    con <- SQL $ L.view connection
     liftIO $ runReaderT m con
 {-# INLINE db #-}
 
 -- | Run a db action in a privileged context
-db' :: ReaderT SqlBackend IO b -> SQL Privileged l b
+db' :: ReaderT SqlBackend IO b -> SQL st 'Privileged l b
 db' = unprivileged . db
 {-# INLINE db' #-}
 
 -- | Annotate an operation as requiring serializability
-withSerializeable :: SQL p l a -> SQL p Serializeable a
+withSerializeable :: SQL st p l a -> SQL st p 'Serializeable a
 withSerializeable (SQL m) = SQL m
 
 -- | Annotate an operation as not requiring serializability
-withReadCommited :: SQL p ReadCommitted a -> SQL p ReadCommitted a
+withReadCommited :: SQL st p 'ReadCommitted a -> SQL st p 'ReadCommitted a
 withReadCommited m = m
 
 --------------------------------------------------------------------------------
@@ -335,7 +340,7 @@ conflict descr = Conflict (uniqueType descr) (uniqueFieldNames descr)
 -- is violated
 insertUniqueConflict :: (DescribeUnique a, PersistEntityBackend a ~ SqlBackend) =>
                         a
-                     -> SQL 'Privileged l (Key a)
+                     -> SQL st 'Privileged l (Key a)
 insertUniqueConflict x = do
     mbCfl <- db $ checkUnique x
     case mbCfl of
@@ -348,7 +353,7 @@ replaceUniqueConflict :: (Eq a, Eq (Unique a), DescribeUnique a,
                           PersistEntityBackend a ~ SqlBackend) =>
                          Key a
                       -> a
-                      -> SQL 'Privileged l ()
+                      -> SQL st 'Privileged l ()
 replaceUniqueConflict k v = do
     mbCfl <- db $ replaceUnique k v
     case mbCfl of
