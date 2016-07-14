@@ -21,6 +21,11 @@ module Lambdatrade.Persistence
     Privilege (..)
   , TransactionLevel(..)
   , setTransactionLevel
+  , SqlState (..)
+  , connection
+  , userState
+  , askState
+  , viewState
   , SQL (..)
   , unprivileged
   , db
@@ -115,10 +120,16 @@ setTransactionLevel l = do
 genSingletons [''Privilege, ''TransactionLevel]
 
 data SqlState st = SqlState { sqlStateConnection :: !SqlBackend
-                            , sqlStateUserState :: !st
+                            , sqlStateUserState  :: !st
                             } deriving ( Typeable, Generic)
 
 L.makeLensesWith L.camelCaseFields ''SqlState
+
+askState :: SQL st r l st
+askState = SQL $ L.view userState
+
+viewState :: L.Getting a st a -> SQL st r l a
+viewState f = SQL . L.view $ userState . f
 
 -- | An SQL action running in a privilege context @r@
 newtype SQL (st :: *) (r :: Privilege) (l :: TransactionLevel)
