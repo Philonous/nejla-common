@@ -37,6 +37,7 @@ module Lambdatrade.Persistence
   , runSQL'
   , withSerializeable
   , withReadCommited
+  , forkDB
   -- * Persistence Helpers
   , checkmarkToBool
   , boolToCheckmark
@@ -75,6 +76,7 @@ module Lambdatrade.Persistence
   ) where
 
 import           Control.Applicative
+import           Control.Concurrent
 import qualified Control.Exception as Ex
 import qualified Control.Lens as L
 import           Control.Monad.Catch
@@ -195,6 +197,12 @@ withSerializeable (SQL m) = SQL m
 -- | Annotate an operation as not requiring serializability
 withReadCommited :: SQL st p 'ReadCommitted a -> SQL st p 'ReadCommitted a
 withReadCommited m = m
+
+forkDB :: SQL st p r () -> SQL st p r ()
+forkDB (SQL m) = do
+  st <- SQL ask
+  _ <- liftIO . forkIO $ runReaderT m st
+  return ()
 
 --------------------------------------------------------------------------------
 -- Persistence Helpers ---------------------------------------------------------
