@@ -1,5 +1,5 @@
-This repository provides shared functionality related to the Nejla Reference Architecture.
+This repository provides shared functionality, template solutions, documentation, and a common vocabulary, related to, and for applications adhering to, the Lambdatrade Reference Architecture (LRA).
 
-The reference architecture currently assumes Haskell, GHC, Cabal, Persistent, Esqueleto, PostgreSQL, and REST APIs.
+LRA currently assumes Haskell, GHC, Cabal, Persistent, PostgreSQL, and REST APIs.
 
-Copyright © 2014-2016 Nejla AB. All rights reserved.
+Copyright © 2014-2015 Lambdatrade AB. All rights reserved.

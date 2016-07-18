@@ -21,32 +21,32 @@ module NejlaCommon ( module NejlaCommon.Wai
                    , withPool
                    ) where
 
-import Control.Applicative
-import Control.Monad
-import Control.Monad.IO.Class
-import Control.Monad.Logger
-import Data.Aeson
-import Data.Char
-import Data.Data
-import Data.Default
-import Data.Maybe
-import Data.Monoid
-import Data.Time.Clock
-import Data.Time.Format
-import Data.UUID
-import Database.Persist.Postgresql
-import Database.Persist.Sql
-import Database.Persist.TH
-import Generics.Generic.Aeson
-import GHC.Generics
-import GHC.TypeLits
-import Language.Haskell.TH
-import Language.Haskell.TH.Syntax
-import System.Environment
-import Web.HttpApiData
-import Web.PathPieces
+import           Control.Applicative
+import           Control.Monad
+import           Control.Monad.IO.Class
+import           Control.Monad.Logger
+import           Data.Aeson
+import           Data.Char
+import           Data.Data
+import           Data.Default
+import           Data.Maybe
+import           Data.Monoid
+import           Data.Time.Clock
+import           Data.Time.Format
+import           Data.UUID
+import           Database.Persist.Postgresql
+import           Database.Persist.Sql
+import           Database.Persist.TH
+import           Generics.Generic.Aeson
+import           GHC.Generics
+import           GHC.TypeLits
+import           Language.Haskell.TH
+import           Language.Haskell.TH.Syntax
+import           System.Environment
+import           Web.HttpApiData
+import           Web.PathPieces
 
-import Data.ByteString (ByteString)
+import           Data.ByteString (ByteString)
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
@@ -57,7 +57,8 @@ import qualified Data.Text as TS
 import qualified Rest.Types.Info as Rest
 import qualified Data.Text.Encoding as TS
 
-import NejlaCommon.Wai
+import           NejlaCommon.Persistence
+import           NejlaCommon.Wai
 
 instance PersistField UUID where
     toPersistValue = toPersistValue . BS.concat . BSL.toChunks . toByteString
