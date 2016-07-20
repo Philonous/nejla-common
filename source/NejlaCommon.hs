@@ -11,6 +11,7 @@
 -- 'JSONSchema', 'PathPiece', 'Info' as well as 'FromHttpApiData' and
 -- 'ToHttpApiData'.
 module NejlaCommon ( module NejlaCommon.Wai
+                   , module NejlaCommon.Persistence
                    , DerivedData(..)
                    , WithField(..)
                    , derivedType
