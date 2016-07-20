@@ -123,8 +123,8 @@ withPool n f = do
 -- instance members are set to 'gparseJsonWithSettings', 'gtoJsonWithSettings'
 -- and 'gSchemaWithSettings' respectively with options set to strip the type
 -- name as a prefix.
-mkGenericJSON :: Q Type -> Q [Dec]
-mkGenericJSON tp = do
+mkGenericJson :: Q Type -> Q [Dec]
+mkGenericJson tp = do
     t <- tp
     -- If the type is a simple type, strip its name from the field names
     let prefix =
