@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators #-}
 -- Copyright © 2014-2015 Lambdatrade AB. All rights reserved.
 
 {-# LANGUAGE DataKinds #-}
@@ -35,8 +36,9 @@ module NejlaCommon.Persistence
   , serializeable
   , repeatableRead
   , runApp'
+  , withReadCommitted
+  , withRepeatableRead
   , withSerializeable
-  , withReadCommited
   , forkApp
   -- * Persistence Helpers
   , checkmarkToBool
@@ -193,30 +195,36 @@ runApp' :: SingI l => ConnectionPool -> st -> App st p l a -> IO a
 runApp' = runApp sing
 
 
--- | Run an unprivileged operation in a privileged context
-unprivileged :: App st 'Unprivileged l a -> App st 'Privileged l a
+-- | Run any operation in a privileged context
+unprivileged :: App st p l a -> App st 'Privileged l a
 unprivileged (App m) = App m
 
--- | Run a db action in a polymorphic context (i.e. it can be run both in
--- privileged and in unprivileged contexts)
-db :: ReaderT SqlBackend IO b -> App st p l b
+-- | Run a db action in an unprivileged context
+db :: ReaderT SqlBackend IO b -> App st 'Unprivileged 'ReadCommitted b
 db m = do
     con <- App $ L.view connection
     liftIO $ runReaderT m con
 {-# INLINE db #-}
 
 -- | Run a db action in a privileged context
-db' :: ReaderT SqlBackend IO b -> App st 'Privileged l b
+db' :: ReaderT SqlBackend IO b -> App st 'Privileged 'ReadCommitted b
 db' = unprivileged . db
 {-# INLINE db' #-}
 
--- | Annotate an operation as requiring serializability
+-- | Annotate or upgrade an operation as working in Read Committed mode
+withReadCommitted :: App st p 'ReadCommitted a
+                  -> App st p 'ReadCommitted a
+withReadCommitted (App m) = (App m)
+
+-- | Annotate or upgrade an operation as requiring Repeatable Read
+withRepeatableRead :: ((l :<= 'RepeatableRead) ~ 'True') =>
+                      App st p l a
+                   -> App st' p Serializeable a
+withRepeatableRead (App m) = App m
+
+-- | Annotate or upgrade an operation as requiring Serializable
 withSerializeable :: App st p l a -> App st p 'Serializeable a
 withSerializeable (App m) = App m
-
--- | Annotate an operation as not requiring read committed mode
-withReadCommited :: App st p 'ReadCommitted a -> App st p 'ReadCommitted a
-withReadCommited m = m
 
 -- | Run an app action in a new haskell thread
 forkApp :: App st p r () -> App st p r ()
@@ -384,11 +392,11 @@ conflict descr = Conflict (uniqueType descr) (uniqueFieldNames descr)
 -- is violated
 insertUniqueConflict :: (DescribeUnique a, PersistEntityBackend a ~ SqlBackend) =>
                         a
-                     -> App st 'Privileged l (Key a)
+                     -> App st 'Privileged 'ReadCommitted (Key a)
 insertUniqueConflict x = do
-    mbCfl <- db $ checkUnique x
+    mbCfl <- db' $ checkUnique x
     case mbCfl of
-     Nothing -> db $ insert x
+     Nothing -> db' $ insert x
      Just cfl -> liftIO . Ex.throwIO $ conflict cfl
 
 -- | Replace a value, throwing a Conflict exception when a uniqueness constraint
@@ -397,9 +405,9 @@ replaceUniqueConflict :: (Eq a, Eq (Unique a), DescribeUnique a,
                           PersistEntityBackend a ~ SqlBackend) =>
                          Key a
                       -> a
-                      -> App st 'Privileged l ()
+                      -> App st 'Privileged 'ReadCommitted ()
 replaceUniqueConflict k v = do
-    mbCfl <- db $ replaceUnique k v
+    mbCfl <- db' $ replaceUnique k v
     case mbCfl of
      Nothing -> return ()
      Just cfl -> liftIO . Ex.throwIO $ conflict cfl
