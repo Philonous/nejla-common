@@ -14,7 +14,7 @@ module NejlaCommon ( module NejlaCommon.Wai
                    , DerivedData(..)
                    , WithField(..)
                    , derivedType
-                   , mkGenericJSON
+                   , mkGenericJson
                    , mkJsonType
                    , formatUTC
                    , parseUTC
@@ -147,7 +147,7 @@ mkGenericJson tp = do
 mkJsonType :: Name -> DerivedData -> Q [Dec]
 mkJsonType name dd = do
     tp@(DataD _ name _ _ _:_) <- derivedType name dd
-    instances <- mkGenericJSON (return $ ConT name)
+    instances <- mkGenericJson (return $ ConT name)
     return $ tp ++ instances
 
 -- | See 'derivedType'.

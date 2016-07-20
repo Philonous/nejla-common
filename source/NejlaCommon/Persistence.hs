@@ -1,4 +1,3 @@
-{-# LANGUAGE TypeOperators #-}
 -- Copyright © 2014-2015 Lambdatrade AB. All rights reserved.
 
 {-# LANGUAGE DataKinds #-}
@@ -16,6 +15,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 
 module NejlaCommon.Persistence
   ( -- * SQL Monad
@@ -217,9 +218,9 @@ withReadCommitted :: App st p 'ReadCommitted a
 withReadCommitted (App m) = (App m)
 
 -- | Annotate or upgrade an operation as requiring Repeatable Read
-withRepeatableRead :: ((l :<= 'RepeatableRead) ~ 'True') =>
+withRepeatableRead :: ((l :<= 'RepeatableRead) ~ 'True) =>
                       App st p l a
-                   -> App st' p Serializeable a
+                   -> App st p 'Serializeable a
 withRepeatableRead (App m) = App m
 
 -- | Annotate or upgrade an operation as requiring Serializable
