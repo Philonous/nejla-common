@@ -122,11 +122,11 @@ data TransactionLevel = Serializeable
 -- be run at the beginning of the transaction
 setTransactionLevel :: MonadIO m => TransactionLevel -> ReaderT SqlBackend m ()
 setTransactionLevel l = do
-    rawExecute ("SET TRANSACTION ISOLATION LEVEL" <> level  l) []
+    rawExecute ("SET TRANSACTION ISOLATION LEVEL " <> level  l) []
   where
     level Serializeable = "SERIALIZEABLE"
     level RepeatableRead = "REPEATABLE READ"
-    level ReadCommitted = "READ COMMITED"
+    level ReadCommitted = "READ COMMITTED"
 
 genSingletons [''Privilege, ''TransactionLevel]
 
