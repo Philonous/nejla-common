@@ -34,12 +34,12 @@ module NejlaCommon.Persistence
   , db'
   , runApp
   , readCommitted
-  , serializeable
+  , serializable
   , repeatableRead
   , runApp'
   , withReadCommitted
   , withRepeatableRead
-  , withSerializeable
+  , withSerializable
   , forkApp
   -- * Persistence Helpers
   , checkmarkToBool
@@ -113,7 +113,7 @@ data Privilege = Unprivileged -- ^ Operations that can be run by unprivileged
 
 -- | Transaction Level to run a transaction at. Please see your databases
 -- documentation for the semantics
-data TransactionLevel = Serializeable
+data TransactionLevel = Serializable
                       | RepeatableRead
                       | ReadCommitted
             deriving (Show, Eq, Ord, Data, Typeable, Generic)
@@ -124,7 +124,7 @@ setTransactionLevel :: MonadIO m => TransactionLevel -> ReaderT SqlBackend m ()
 setTransactionLevel l = do
     rawExecute ("SET TRANSACTION ISOLATION LEVEL " <> level  l) []
   where
-    level Serializeable = "SERIALIZEABLE"
+    level Serializable = "SERIALIZABLE"
     level RepeatableRead = "REPEATABLE READ"
     level ReadCommitted = "READ COMMITTED"
 
@@ -163,7 +163,7 @@ newtype App (st :: *) (r :: Privilege) (l :: TransactionLevel)
                             , MonadThrow, MonadCatch)
 
 -- | run an App transaction
-runApp :: Sing l -- ^ mode to run the transaction in (see 'serializeable',
+runApp :: Sing l -- ^ mode to run the transaction in (see 'serializable',
                  -- 'repeatableRead' and 'readCommitted')
        -> ConnectionPool -- ^ Database connection pool to use
        -> st -- ^ User state to pass along
@@ -177,9 +177,9 @@ runApp tLevel pool ust ((App m) :: App st p l a) = flip runSqlPool pool $ do
                       }
     lift $ runReaderT m st
 
--- | Run the transaction in serializeable mode
-serializeable :: Sing 'Serializeable
-serializeable = SSerializeable
+-- | Run the transaction in serializable mode
+serializable :: Sing 'Serializable
+serializable = SSerializable
 
 -- | Run the transaction in repeatable read mode
 repeatableRead :: Sing 'RepeatableRead
@@ -220,12 +220,12 @@ withReadCommitted (App m) = (App m)
 -- | Annotate or upgrade an operation as requiring Repeatable Read
 withRepeatableRead :: ((l :<= 'RepeatableRead) ~ 'True) =>
                       App st p l a
-                   -> App st p 'Serializeable a
+                   -> App st p 'Serializable a
 withRepeatableRead (App m) = App m
 
 -- | Annotate or upgrade an operation as requiring Serializable
-withSerializeable :: App st p l a -> App st p 'Serializeable a
-withSerializeable (App m) = App m
+withSerializable :: App st p l a -> App st p 'Serializable a
+withSerializable (App m) = App m
 
 -- | Run an app action in a new haskell thread
 forkApp :: App st p r () -> App st p r ()
