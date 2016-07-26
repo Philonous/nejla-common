@@ -58,8 +58,8 @@ import qualified Data.Text as TS
 import qualified Rest.Types.Info as Rest
 import qualified Data.Text.Encoding as TS
 
-import           NejlaCommon.Persistence
 import           NejlaCommon.Wai
+import           NejlaCommon.Persistence
 
 instance PersistField UUID where
     toPersistValue = toPersistValue . BS.concat . BSL.toChunks . toByteString
