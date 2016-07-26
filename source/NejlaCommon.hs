@@ -34,7 +34,7 @@ import           Data.Maybe
 import           Data.Monoid
 import           Data.Time.Clock
 import           Data.Time.Format
-import           Data.UUID
+import qualified Data.UUID as UUID
 import           Database.Persist.Postgresql
 import           Database.Persist.Sql
 import           Database.Persist.TH
@@ -61,36 +61,42 @@ import qualified Data.Text.Encoding as TS
 import           NejlaCommon.Wai
 import           NejlaCommon.Persistence
 
-instance PersistField UUID where
-    toPersistValue = toPersistValue . BS.concat . BSL.toChunks . toByteString
-    fromPersistValue = \x -> fromPersistValue x >>= \v ->
-        case fromByteString $ BSL.fromChunks [v] of
-            Nothing -> Left $ TS.concat ["Invalid UUID: ", TS.pack (show v)]
-            Just u -> Right u
+instance PersistField UUID.UUID where
+    toPersistValue = toPersistValue . UUID.toString
+    fromPersistValue = \x -> case x of
+        PersistDbSpecific bs ->
+            case UUID.fromASCIIBytes bs of
+             Nothing -> Left $ "Invalid UUID: " <> (TS.pack $ show bs)
+             Just u -> Right u
+        PersistText txt ->
+            case UUID.fromString $ TS.unpack txt of
+             Nothing -> Left $ "Invalid UUID: " <> (TS.pack $ show txt)
+             Just u -> Right u
+        e -> Left $ "Can not convert to uuid: " <> (TS.pack $ show e)
 
-instance PersistFieldSql UUID where
-    sqlType _ = SqlBlob
+instance PersistFieldSql UUID.UUID where
+    sqlType _ = SqlOther "uuid"
 
-instance ToJSON UUID where
-    toJSON = toJSON . toString
+instance ToJSON UUID.UUID where
+    toJSON = toJSON . UUID.toString
 
-instance FromJSON UUID where
-    parseJSON = maybe mzero return . fromString <=< parseJSON
+instance FromJSON UUID.UUID where
+    parseJSON = maybe mzero return . UUID.fromString <=< parseJSON
 
-instance Schema.JSONSchema UUID where
+instance Schema.JSONSchema UUID.UUID where
     schema uuid = Schema.schema $ fmap (TS.pack . show) uuid
 
-instance PathPiece UUID where
-    fromPathPiece = fromString . TS.unpack
-    toPathPiece = TS.pack . toString
+instance PathPiece UUID.UUID where
+    fromPathPiece = UUID.fromString . TS.unpack
+    toPathPiece = TS.pack . UUID.toString
 
-instance Rest.Info UUID where
+instance Rest.Info UUID.UUID where
     describe _ = "uuid"
 
-instance ToHttpApiData UUID where
+instance ToHttpApiData UUID.UUID where
     toUrlPiece = toPathPiece
 
-instance FromHttpApiData UUID where
+instance FromHttpApiData UUID.UUID where
     parseUrlPiece txt =
         case fromPathPiece txt of
          Nothing -> Left $ "Invalid UUID: " <> txt
