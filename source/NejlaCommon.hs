@@ -12,6 +12,7 @@
 -- 'ToHttpApiData'.
 module NejlaCommon ( module NejlaCommon.Wai
                    , module NejlaCommon.Persistence
+                   , module NejlaCommon.Persistence.Logging
                    , DerivedData(..)
                    , WithField(..)
                    , derivedType
@@ -60,6 +61,8 @@ import qualified Data.Text.Encoding as TS
 
 import           NejlaCommon.Wai
 import           NejlaCommon.Persistence
+import           NejlaCommon.Persistence.Logging
+
 
 instance PersistField UUID.UUID where
     toPersistValue = toPersistValue . UUID.toString
