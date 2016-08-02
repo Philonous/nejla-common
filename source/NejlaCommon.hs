@@ -13,6 +13,7 @@
 module NejlaCommon ( module NejlaCommon.Wai
                    , module NejlaCommon.Persistence
                    , module NejlaCommon.Persistence.Logging
+                   , module NejlaCommon.Helpers
                    , DerivedData(..)
                    , WithField(..)
                    , derivedType
@@ -59,9 +60,10 @@ import qualified Data.Text as TS
 import qualified Rest.Types.Info as Rest
 import qualified Data.Text.Encoding as TS
 
-import           NejlaCommon.Wai
+import           NejlaCommon.Helpers
 import           NejlaCommon.Persistence
 import           NejlaCommon.Persistence.Logging
+import           NejlaCommon.Wai
 
 
 instance PersistField UUID.UUID where
@@ -311,16 +313,6 @@ derivedType' name DD{ derivedPrefix = pre
          in return $ [DataInstD [] (mkName "AddResource") [ConT name]
                         [RecC cName cFields] []]
      _ -> error "mkAddCall only works on single-record-constructor types"
-
--- Used by derivedType{,'} and mkGenericJSON. Not exported.
-downcase :: [Char] -> [Char]
-downcase [] = []
-downcase (c:cs) = toLower c : cs
-
--- Used by derivedType{,'}. Not exported.
-upcase :: [Char] -> [Char]
-upcase [] = []
-upcase (c:cs) = toUpper c : cs
 
 -- Used by derivedType{,'}. Not exported.
 notIn :: Eq a => a -> [a] -> Bool
