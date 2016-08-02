@@ -6,6 +6,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 -- | In addition to the entities below, this module provides the following
 -- 'UUID' instances: 'PersistField', 'PersistFieldSql', 'FromJSON', 'ToJSON',
 -- 'JSONSchema', 'PathPiece', 'Info' as well as 'FromHttpApiData' and
@@ -26,7 +28,6 @@ module NejlaCommon ( module NejlaCommon.Wai
 
 import           Control.Applicative
 import           Control.Monad
-import           Control.Monad.IO.Class
 import           Control.Monad.Logger
 import           Data.Aeson
 import           Data.Char
@@ -38,8 +39,6 @@ import           Data.Time.Clock
 import           Data.Time.Format
 import qualified Data.UUID as UUID
 import           Database.Persist.Postgresql
-import           Database.Persist.Sql
-import           Database.Persist.TH
 import           Generics.Generic.Aeson
 import           GHC.Generics
 import           GHC.TypeLits
@@ -49,10 +48,7 @@ import           System.Environment
 import           Web.HttpApiData
 import           Web.PathPieces
 
-import           Data.ByteString (ByteString)
-
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as BSL
 import qualified Data.HashMap.Strict as HMap
 import qualified Data.JSON.Schema as Schema
 import qualified Data.List as L
@@ -119,17 +115,17 @@ withPool n f = do
     let connectionString =
           BS.intercalate " "
           . catMaybes
-            $ [ "host"     .= Just dbHost
-              , "user"     .= Just dbUser
-              , "dbname"   .= dbDatabase
-              , "password" .= dbPassword
+            $ [ "host"     ..= Just dbHost
+              , "user"     ..= Just dbUser
+              , "dbname"   ..= dbDatabase
+              , "password" ..= dbPassword
               ]
     (runStderrLoggingT . withPostgresqlPool connectionString n) f
   where
     toBS = TS.encodeUtf8 . TS.pack
 
-    k .= (Just v) = Just $ k <> "=" <> v
-    k .= Nothing = Nothing
+    k ..= (Just v) = Just $ k <> "=" <> v
+    _ ..= Nothing = Nothing
 
 -- | Create "trivial" instances for 'FromJSON', 'ToJSON', 'JSONSchema'. The
 -- instance members are set to 'gparseJsonWithSettings', 'gtoJsonWithSettings'
@@ -158,8 +154,8 @@ mkGenericJson tp = do
 -- | 'mkJsonType' is 'derivedType' in combination with 'mkGenericJSON'.
 mkJsonType :: Name -> DerivedData -> Q [Dec]
 mkJsonType name dd = do
-    tp@(DataD _ name _ _ _:_) <- derivedType name dd
-    instances <- mkGenericJson (return $ ConT name)
+    tp@(DataD _ name' _ _ _:_) <- derivedType name dd
+    instances <- mkGenericJson (return $ ConT name')
     return $ tp ++ instances
 
 -- | See 'derivedType'.

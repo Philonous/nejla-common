@@ -5,7 +5,6 @@ module NejlaCommon.Wai where
 
 import           Control.Monad.Trans
 import           Control.Monad.Trans.Resource
-import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import           Data.IORef
 import           Data.Text (Text)
@@ -33,7 +32,7 @@ multipartHandlerOverride method path app req sendRes
     =  runResourceT $ do
           iState <- getInternalState
           let backend = tempFileBackEnd iState
-          (params, files) <- liftIO $ parseRequestBody backend req
+          (_params, files) <- liftIO $ parseRequestBody backend req
           let filename = case files of
                           [] -> ""
                           ((_, FileInfo{fileContent = fn}):_) -> fn

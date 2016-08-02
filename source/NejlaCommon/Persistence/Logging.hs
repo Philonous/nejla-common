@@ -11,7 +11,6 @@ module NejlaCommon.Persistence.Logging where
 
 import           Control.Applicative
 import qualified Control.Exception as Ex
-import           Control.Monad
 import qualified Data.Aeson.TH as Aeson
 import qualified Data.Aeson as Aeson
 import           Data.ByteString (ByteString)
@@ -24,15 +23,11 @@ import           Data.IORef
 import qualified Data.List as List
 import           Data.Monoid
 import           Data.Text (Text)
-import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.Text.Encoding.Error as Text
 import qualified Data.Text.IO as Text
 import           Data.Time.Clock (UTCTime)
 import           Data.Time.Clock (getCurrentTime)
-import qualified Data.Time.Clock as Time
-import           Data.Typeable
-import qualified Database.Persist.Sql as P
 import           GHC.Generics
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
@@ -106,7 +101,6 @@ instance LogMessage RequestLog where
 logHttpCalls :: (RequestLog -> IO ())
                ->  Wai.Middleware
 logHttpCalls logRequest app request' respond = do
-    now <- getCurrentTime
     -- We can't use (Wai.strictRequestBody request) because that consumes the
     -- request body. TODO: Figure this out
     (reqB, reqBody) <- do
@@ -119,7 +113,6 @@ logHttpCalls logRequest app request' respond = do
         return (rBody, if BS.null body then Nothing else Just body)
     let request = request'{Wai.requestBody = reqB}
     rr <- app request $ \response -> do
-        now' <- getCurrentTime
         body <- responseToText response
         logRequest
           RequestLog { requestLogMethod       = bst $ Wai.requestMethod request
@@ -152,9 +145,6 @@ logHttpCalls logRequest app request' respond = do
       let txt = Text.decodeUtf8With Text.lenientDecode
                 . BSL.toStrict . BS.toLazyByteString $ mconcat chunks
       return $ Just txt
-    readMaybe x = case reads x of
-                   ((r,_):_) -> Just r
-                   [] -> Nothing
 
 --------------------------------------------------------------------------------
 -- Critical Event --------------------------------------------------------------
@@ -184,9 +174,7 @@ catchMiddleware logEvent app = \req cont ->
                     , criticalEventContext = ""
                     , criticalEventDetails = showText e
                     })
-                  (\e -> Text.hPutStrLn stderr $
+                  (\e' -> Text.hPutStrLn stderr $
                          "[Error] Exception while trying to write to Critical Event log: "
-                         <> showText (e :: Ex.SomeException))
+                         <> showText (e' :: Ex.SomeException))
               cont (Wai.responseBuilder HTTP.status500 [] ""))
-  where
-    showText = Text.pack . show
