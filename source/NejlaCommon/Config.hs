@@ -10,6 +10,9 @@ module NejlaCommon.Config
   , getConfMaybe'
   , getConf
   , getConfMaybe
+  , getConfBool
+  , getConfBoolMaybe
+  , loadConf
   , Conf.Config
   ) where
 
@@ -70,6 +73,8 @@ getConfGeneric fromString env confName mbDefault conf = do
      Just v -> return v
 
 -- | Get configuration option based on Read instance
+--
+-- /NB/: Do NOT use this for boolean options, use 'getConfBool' instead
 getConf' :: (Conf.Configured a, MonadLogger m, MonadIO m, Read a) =>
             String -- ^ Environment variable to read option from
          -> Conf.Name -- ^ Config name to read option from
@@ -81,6 +86,8 @@ getConf' :: (Conf.Configured a, MonadLogger m, MonadIO m, Read a) =>
 getConf' = getConfGeneric safeRead
 
 -- | Get configuration option based on Read instance
+--
+-- /NB/: Do NOT use this for boolean options, use 'getConfBoolMaybe' instead
 getConfMaybe' :: (Conf.Configured a, MonadLogger m, MonadIO m, Read a) =>
                  String -- ^ Environment variable to read option from
               -> Conf.Name -- ^ Config name to read option from
@@ -106,6 +113,35 @@ getConfMaybe :: (MonadLogger m, MonadIO m) =>
              -> Conf.Config
              -> m (Maybe Text)
 getConfMaybe = getConfGenericMaybe (Just . Text.pack)
+
+
+-- | Get boolean config option
+getConfBool :: (MonadIO m, MonadLogger m) =>
+               String -- ^ Environment variable to read option from
+            -> Conf.Name -- ^ Config name to read option from
+            -> Either Text Bool -- ^ Default value to use when option could not
+                                -- be found or a description of the object to
+                                -- display as an error message
+            -> Conf.Config
+            -> m Bool
+getConfBool = getConfGeneric parseBool
+  where
+    parseBool str | (map Char.toLower $ str) == "true" = Just True
+                  | (map Char.toLower $ str) == "false" = Just False
+                  | otherwise = Nothing
+
+-- | Get boolean config option
+getConfBoolMaybe :: (MonadIO m, MonadLogger m) =>
+                    String -- ^ Environment variable to read option from
+                 -> Conf.Name -- ^ Config name to read option from
+                 -> Conf.Config
+                 -> m (Maybe  Bool)
+getConfBoolMaybe = getConfGenericMaybe parseBool
+  where
+    parseBool str | (map Char.toLower $ str) == "true" = Just True
+                  | (map Char.toLower $ str) == "false" = Just False
+                  | otherwise = Nothing
+
 
 -- | Load configuration file.
 --
