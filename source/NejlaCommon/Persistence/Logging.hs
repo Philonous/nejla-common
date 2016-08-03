@@ -11,8 +11,9 @@ module NejlaCommon.Persistence.Logging where
 
 import           Control.Applicative
 import qualified Control.Exception as Ex
-import qualified Data.Aeson.TH as Aeson
+import           Data.Aeson
 import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.TH as Aeson
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as BS
@@ -42,7 +43,7 @@ import           NejlaCommon.Helpers
 -- | Standardized logging row
 data LogRow = LogRow { logRowTime    :: !UTCTime
                      , logRowType    :: !Text
-                     , logRowPayload :: !Text
+                     , logRowPayload :: !Value
                      } deriving Show
 
 -- | Create a log row
@@ -51,7 +52,7 @@ toLogRow v = do
   now <- getCurrentTime
   return LogRow{ logRowTime    = now
                , logRowType    = messageType v
-               , logRowPayload = Text.decodeUtf8 . BSL.toStrict $ Aeson.encode v
+               , logRowPayload = Aeson.toJSON v
                }
 
 class Aeson.ToJSON a => LogMessage a  where
