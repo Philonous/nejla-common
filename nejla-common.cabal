@@ -14,6 +14,7 @@ cabal-version:      >=1.10
 
 library
   exposed-modules:  NejlaCommon
+                  , NejlaCommon.Config
   other-modules:    NejlaCommon.Helpers
                   , NejlaCommon.Persistence
                   , NejlaCommon.Persistence.Logging
@@ -24,6 +25,7 @@ library
                   , binary <0.8
                   , bytestring
                   , case-insensitive >= 1.2
+                  , configurator
                   , data-default
                   , esqueleto
                   , exceptions >= 0.8

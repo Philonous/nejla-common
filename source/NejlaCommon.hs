@@ -35,13 +35,14 @@ import           Data.Data
 import           Data.Default
 import           Data.Maybe
 import           Data.Monoid
+import qualified Data.Text.Encoding as Text
 import           Data.Time.Clock
 import           Data.Time.Format
 import qualified Data.UUID as UUID
 import           Database.Persist.Postgresql
-import           Generics.Generic.Aeson
 import           GHC.Generics
 import           GHC.TypeLits
+import           Generics.Generic.Aeson
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Syntax
 import           System.Environment
@@ -56,6 +57,7 @@ import qualified Data.Text as TS
 import qualified Rest.Types.Info as Rest
 import qualified Data.Text.Encoding as TS
 
+import           NejlaCommon.Config
 import           NejlaCommon.Helpers
 import           NejlaCommon.Persistence
 import           NejlaCommon.Persistence.Logging
@@ -106,12 +108,23 @@ instance FromHttpApiData UUID.UUID where
 -- | Acquires the database password (from the 'DB_PASSWORD' environment
 -- variable) and creates a PostgreSQL connection pool with the specified number
 -- of threads.
-withPool :: Int -> (ConnectionPool -> LoggingT IO b) -> IO b
-withPool n f = do
-    dbHost <-  maybe "database" toBS <$> lookupEnv "DB_HOST"
-    dbUser <- maybe "postgres" toBS <$> lookupEnv "DB_USER"
-    dbDatabase <- fmap toBS <$> lookupEnv "DB_DATABASE"
-    dbPassword <- fmap toBS <$> lookupEnv "DB_PASSWORD"
+--
+-- The function will try to read and use the following environment variables and
+-- config options respectively:
+--
+-- * "DB_HOST" and "db.host" (defaults to "database")
+-- * "DB_USER" and "db.user" (defaults to "postgres)
+-- * "DB_DATABASE" and "db.database" (defaults to empty)
+-- * "DB_PASSWORD" and "db.password" (defaults to empty)
+withPool :: Config
+         -> Int -- ^ Number of connections to open
+         -> (ConnectionPool -> LoggingT IO b)
+         -> IO b
+withPool conf n f = runStderrLoggingT $ do
+    dbHost <- getConf "DB_HOST" "db.host" (Right "database") conf
+    dbUser <- getConf "DB_USER" "db.user" (Right "postgres") conf
+    dbDatabase <- getConfMaybe "DB_DATABASE" "db.database" conf
+    dbPassword <- getConfMaybe "DB_PASSWORD" "db.password" conf
     let connectionString =
           BS.intercalate " "
           . catMaybes
@@ -120,11 +133,9 @@ withPool n f = do
               , "dbname"   ..= dbDatabase
               , "password" ..= dbPassword
               ]
-    (runStderrLoggingT . withPostgresqlPool connectionString n) f
+    withPostgresqlPool connectionString n $ f
   where
-    toBS = TS.encodeUtf8 . TS.pack
-
-    k ..= (Just v) = Just $ k <> "=" <> v
+    k ..= (Just v) = Just $ k <> "=" <> (Text.encodeUtf8 v)
     _ ..= Nothing = Nothing
 
 -- | Create "trivial" instances for 'FromJSON', 'ToJSON', 'JSONSchema'. The

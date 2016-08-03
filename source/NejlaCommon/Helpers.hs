@@ -14,6 +14,11 @@ import qualified Data.Text as Text
 showText :: Show a => a -> Text
 showText = Text.pack . show
 
+safeRead :: Read a => String -> Maybe a
+safeRead str = case reads str of
+     ((v,_):_) -> Just v
+     _ -> Nothing
+
 -- | Convert the first character in a String to lower case
 downcase :: String -> String
 downcase [] = []
