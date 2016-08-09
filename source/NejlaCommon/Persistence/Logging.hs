@@ -32,6 +32,7 @@ import           Data.Time.Clock (getCurrentTime)
 import           GHC.Generics
 import qualified Network.HTTP.Types as HTTP
 import qualified Network.Wai as Wai
+import           System.IO
 import           System.IO (stderr)
 
 import           NejlaCommon.Helpers
@@ -46,6 +47,8 @@ data LogRow = LogRow { logRowTime    :: !UTCTime
                      , logRowPayload :: !Value
                      } deriving Show
 
+Aeson.deriveJSON (aesonTHOptions "logRow") ''LogRow
+
 -- | Create a log row
 toLogRow :: LogMessage a => a -> IO LogRow
 toLogRow v = do
@@ -57,6 +60,12 @@ toLogRow v = do
 
 class Aeson.ToJSON a => LogMessage a  where
   messageType :: a -> Text
+
+logEvent :: LogMessage a => a -> IO ()
+logEvent event = do
+  row <- toLogRow event
+  BSL.hPutStr stderr $ encode row <> "\n"
+  hFlush stderr
 
 --------------------------------------------------------------------------------
 -- Request/Response log --------------------------------------------------------
