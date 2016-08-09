@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 -- Copyright © 2014-2016 Nejla AB. All rights reserved.
 
 {-# LANGUAGE DataKinds #-}
@@ -29,6 +30,8 @@ module NejlaCommon ( module NejlaCommon.Wai
 import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.Logger
+import           Control.Monad.Trans hiding (lift)
+import           Control.Monad.Trans.Control
 import           Data.Aeson
 import           Data.Char
 import           Data.Data
@@ -116,11 +119,16 @@ instance FromHttpApiData UUID.UUID where
 -- * "DB_USER" and "db.user" (defaults to "postgres)
 -- * "DB_DATABASE" and "db.database" (defaults to empty)
 -- * "DB_PASSWORD" and "db.password" (defaults to empty)
-withPool :: Config
-         -> Int -- ^ Number of connections to open
-         -> (ConnectionPool -> LoggingT IO b)
-         -> IO b
-withPool conf n f = runStderrLoggingT $ do
+-- withPool :: Config
+--          -> Int -- ^ Number of connections to open
+--          -> (ConnectionPool -> LoggingT IO b)
+--          -> IO b
+withPool :: (MonadIO m, MonadBaseControl IO m, MonadLogger m) =>
+            Config
+         -> Int
+         -> (ConnectionPool -> m b)
+         -> m b
+withPool conf n f = do
     dbHost <- getConf "DB_HOST" "db.host" (Right "database") conf
     dbUser <- getConf "DB_USER" "db.user" (Right "postgres") conf
     dbDatabase <- getConfMaybe "DB_DATABASE" "db.database" conf

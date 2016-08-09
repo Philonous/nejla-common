@@ -34,6 +34,7 @@ library
                   , generic-aeson
                   , json-schema
                   , lens
+                  , monad-control
                   , monad-logger
                   , mtl >= 2.2
                   , path-pieces
