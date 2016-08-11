@@ -11,6 +11,7 @@ module NejlaCommon.Persistence.Logging where
 
 import           Control.Applicative
 import qualified Control.Exception as Ex
+import           Control.Monad.Logger (LogLevel(..))
 import           Data.Aeson
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.TH as Aeson
@@ -19,6 +20,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Builder as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.CaseInsensitive as CI
+import qualified Data.Char as Char
 import           Data.Data
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HMap
@@ -26,6 +28,7 @@ import           Data.IORef
 import qualified Data.List as List
 import           Data.Monoid
 import           Data.Text (Text)
+import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.Text.Encoding.Error as Text
 import qualified Data.Text.IO as Text
@@ -46,34 +49,51 @@ import           NejlaCommon.Helpers
 -- | Standardized logging row
 data LogRow = LogRow { logRowTime    :: !UTCTime
                      , logRowType    :: !Text
+                     , logRowLevel   :: !LogLevel
                      , logRowPayload :: !Value
                      } deriving Show
 
 instance ToJSON LogRow where
   toJSON lr =
     let v = toJSON $ logRowPayload lr
+        commons = [ "time" .= logRowTime lr
+                  , "type" .= logRowType lr
+                  , "log_level" .= fromLogLevel (logRowLevel lr)
+                  ]
     in case v of
          Object o ->
-           Object $ o <> HMap.fromList [ "time" .= logRowTime lr
-                                       , "type" .= logRowType lr
-                                       ]
-         _ -> object [ "time" .= logRowTime lr
-                     , "type" .= logRowType lr
-                     , "payload" .= v
-                     ]
+           Object $ o <> HMap.fromList commons
+         _ -> object $ [ "payload" .= v ] <> commons
+      where
+        fromLogLevel LevelDebug       = "debug"
+        fromLogLevel LevelInfo        = "info"
+        fromLogLevel LevelWarn        = "warn"
+        fromLogLevel LevelError       = "error"
+        fromLogLevel (LevelOther lvl) = lvl
+
 
 instance FromJSON LogRow where
   parseJSON = withObject "log row" $ \o -> do
     tp <- o .: "type"
     time <- o .: "time"
+    level <- parseLogLevel <$> o .: "log_level"
     mbPayload <- o .:? "payload"
     payload <- case mbPayload of
                  Nothing -> parseJSON $ Object o
                  Just pl -> return pl
     return LogRow { logRowTime    = time
                   , logRowType    = tp
+                  , logRowLevel   = level
                   , logRowPayload = payload
                   }
+      where
+         parseLogLevel lvl =
+           case Text.map Char.toLower lvl of
+             "debug" -> LevelDebug
+             "info"  -> LevelInfo
+             "warn"  -> LevelWarn
+             "error" -> LevelError
+             _       -> LevelOther lvl
 
 -- | Create a log row
 toLogRow :: LogMessage a => a -> IO LogRow
@@ -81,11 +101,14 @@ toLogRow v = do
   now <- getCurrentTime
   return LogRow{ logRowTime    = now
                , logRowType    = messageType v
+               , logRowLevel   = messageLevel v
                , logRowPayload = Aeson.toJSON v
                }
 
 class Aeson.ToJSON a => LogMessage a  where
   messageType :: a -> Text
+  messageLevel :: a -> LogLevel
+  messageLevel _ = LevelInfo
 
 logEvent :: LogMessage a => a -> IO ()
 logEvent event = do
