@@ -20,6 +20,8 @@ import qualified Data.ByteString.Builder as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.CaseInsensitive as CI
 import           Data.Data
+import           Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HMap
 import           Data.IORef
 import qualified Data.List as List
 import           Data.Monoid
@@ -47,7 +49,31 @@ data LogRow = LogRow { logRowTime    :: !UTCTime
                      , logRowPayload :: !Value
                      } deriving Show
 
-Aeson.deriveJSON (aesonTHOptions "logRow") ''LogRow
+instance ToJSON LogRow where
+  toJSON lr =
+    let v = toJSON $ logRowPayload lr
+    in case v of
+         Object o ->
+           Object $ o <> HMap.fromList [ "time" .= logRowTime lr
+                                       , "type" .= logRowType lr
+                                       ]
+         _ -> object [ "time" .= logRowTime lr
+                     , "type" .= logRowType lr
+                     , "payload" .= v
+                     ]
+
+instance FromJSON LogRow where
+  parseJSON = withObject "log row" $ \o -> do
+    tp <- o .: "type"
+    time <- o .: "time"
+    mbPayload <- o .:? "payload"
+    payload <- case mbPayload of
+                 Nothing -> parseJSON $ Object o
+                 Just pl -> return pl
+    return LogRow { logRowTime    = time
+                  , logRowType    = tp
+                  , logRowPayload = payload
+                  }
 
 -- | Create a log row
 toLogRow :: LogMessage a => a -> IO LogRow
