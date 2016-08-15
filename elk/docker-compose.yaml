@@ -1,0 +1,39 @@
+version: '2'
+
+services:
+  elasticsearch:
+    image: elasticsearch:latest
+    networks:
+      - elk
+    expose:
+      - 9200
+    ports:
+      - 9200:9200
+
+  logstash:
+    build: ./logstash
+    volumes:
+      - $HOME/docker/elk/logstash.conf:/config-dir/logstash.conf
+    command: logstash -f /config-dir/logstash.conf
+    networks:
+      - elk
+    ports:
+      - 12201:12201/udp
+    links:
+      - elasticsearch
+
+  kibana:
+    image: kibana:latest
+    networks:
+      - elk
+    ports:
+      - 5601:5601
+    links:
+      - elasticsearch
+    environment:
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+
+
+networks:
+  elk:
+    external: true
