@@ -1,4 +1,5 @@
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
 -- Copyright © 2014-2015 Lambdatrade AB. All rights reserved.
 
 {-# LANGUAGE DataKinds #-}
@@ -91,8 +92,11 @@ import           Control.Applicative
 import           Control.Concurrent
 import qualified Control.Lens as L
 import           Control.Lens.TH
+import           Control.Monad.Base
 import qualified Control.Monad.Catch as Ex
+import           Control.Monad.Logger
 import           Control.Monad.Reader
+import           Control.Monad.Trans.Control
 import qualified Data.Aeson as Aeson
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -112,6 +116,7 @@ import           Database.Esqueleto as E
 import           Database.Esqueleto.Internal.Sql
 import qualified Database.PostgreSQL.Simple as Postgres
 import           GHC.Generics
+import           System.Log.FastLogger
 import           System.Random
 
 --------------------------------------------------------------------------------
@@ -175,7 +180,22 @@ viewState f = App . L.view $ userState . f
 newtype App (st :: *) (r :: Privilege) (l :: TransactionLevel)
             a = App {unApp :: ReaderT (AppState st) IO a}
                    deriving (Functor, Applicative, Monad, MonadIO
-                            , Ex.MonadThrow, Ex.MonadCatch)
+                            , Ex.MonadThrow, Ex.MonadCatch, MonadBase IO)
+
+instance MonadBaseControl IO (App st r l) where
+  type StM (App st r l) a = a
+  liftBaseWith f = App . ReaderT $ \st ->
+                    f (\(App m) -> runReaderT m st )
+  restoreM       = return
+  {-# INLINABLE liftBaseWith #-}
+  {-# INLINABLE restoreM #-}
+
+instance MonadLogger (App st r l) where
+  monadLoggerLog loc logSource logLevel logStr = do
+    -- We use the log function stored in the SqlBackend
+    con <- App $ L.view connection
+    liftIO $ connLogFunc con loc logSource logLevel $ toLogStr logStr
+
 
 data SqlConfig = SqlConfig { -- | How often to retry the transaction (0 to
                              -- disable retries completely)

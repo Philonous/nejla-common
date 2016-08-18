@@ -1,14 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 module NejlaCommon.Helpers where
 
-import           Control.Applicative
+import           Control.Lens
 import           Data.Aeson.TH
 import           Data.Char
+import           Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HMap
 import qualified Data.List as List
 import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as Text
+import           Language.Haskell.TH
 
+--------------------------------------------------------------------------------
+-- General String/Text helpers -------------------------------------------------
+--------------------------------------------------------------------------------
 
 -- | Product Text output using show instance
 showText :: Show a => a -> Text
@@ -50,17 +56,61 @@ cctu delim = go
 withoutPrefix :: String -- ^ Prefix to remove
               -> String -- ^ Input string
               -> String
-withoutPrefix pre l = case List.stripPrefix pre l of
-    Nothing -> error $ pre <> " is not a prefix of " <> l
+withoutPrefix pre' l = case List.stripPrefix pre' l of
+    Nothing -> error $ pre' <> " is not a prefix of " <> l
     Just l' -> l'
+
+--------------------------------------------------------------------------------
+-- Aeson helpers ---------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 -- | Default options for creatin JSON instances using Aeson.
 aesonTHOptions :: [Char] -- ^ field prefix to strip
                -> Options
-aesonTHOptions pre = defaultOptions{ fieldLabelModifier = mkName
-                                   , constructorTagModifier = mkCName
-                                   }
+aesonTHOptions pre' = defaultOptions{ fieldLabelModifier = mkName'
+                                    , constructorTagModifier = mkCName
+                                    }
   where
     delim = "_"
-    mkName = cctu delim . withoutPrefix pre
-    mkCName = cctu delim . withoutPrefix (upcase pre)
+    mkName' = cctu delim . withoutPrefix pre'
+    mkCName = cctu delim . withoutPrefix (upcase pre')
+
+--------------------------------------------------------------------------------
+-- Lens helpers ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+
+-- | Default replacements for camelCaseFields'
+--
+-- Contains:
+--
+-- * type => type'
+-- * default => default'
+defaultReplacements :: HashMap String String
+defaultReplacements = HMap.fromList
+  [ ("type", "type'")
+  , ("default", "default'")
+  ]
+
+
+-- | Lens' camelCaseFields code doesn't check for illegal names like "type" or
+-- "default". This function fixes them by looking them up in a map of
+-- replacements
+camelCaseFieldsReplacing :: HashMap String String -> LensRules
+camelCaseFieldsReplacing replacements = camelCaseFields & lensField %~
+                   (\lf -> \typeName fieldNames fieldName ->
+                              substNames <$> lf typeName fieldNames fieldName)
+  where
+    substNames (TopName name) = TopName (fixName name)
+    substNames (MethodName className methodName) =
+        MethodName className (fixName methodName)
+    fixName :: Name -> Name
+    fixName name =
+        let nb = nameBase name
+        in case HMap.lookup nb replacements of
+            Nothing -> name
+            Just replace -> mkName replace
+
+
+camelCaseFields' :: LensRules
+camelCaseFields' = camelCaseFieldsReplacing defaultReplacements

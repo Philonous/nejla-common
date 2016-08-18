@@ -28,6 +28,7 @@ library
                   , data-default
                   , esqueleto
                   , exceptions >= 0.8
+                  , fast-logger
                   , generic-aeson
                   , http-api-data
                   , http-types >= 0.9
@@ -50,6 +51,7 @@ library
                   , text
                   , time >= 1.5
                   , transformers
+                  , transformers-base
                   , unordered-containers
                   , uuid
                   , wai
