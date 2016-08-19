@@ -11,7 +11,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 
-module NejlaCommon.Persistence.Logging
+module NejlaCommon.Logging
   -- @TODO: Explicit export. Don't export LogEvent constructor!
 where
 
@@ -23,10 +23,14 @@ import           Data.Aeson
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.TH as Aeson
 import           Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Builder as BS
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.CaseInsensitive as CI
 import           Data.Data
 import qualified Data.HashMap.Strict as HMap
+import           Data.IORef
+import qualified Data.List as List
 import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text.Encoding as Text
@@ -185,74 +189,75 @@ toLogHeaders = fmap toHeader
 
 Aeson.deriveJSON (aesonTHOptions "logHeader") ''LogHeader
 
--- -- | Data type for logging HTTP requests
--- data RequestLog =
---   RequestLog { requestLogMethod       :: !Text
---              , requestLogPath         :: ![Text]
---              , requestLogQuery        :: !Text
---              , requestLogHeaders      :: ![LogHeader]
---              , requestLogRequestBody  :: !(Maybe Text)
---              , requestLogResponseCode :: !Int
---              , requestLogResponseBody :: !(Maybe Text)
---              , requestLogIP           :: !(Maybe Text)
---              } deriving (Show, Typeable, Data, Generic)
+-- | Data type for logging HTTP requests
+data RequestLog =
+  RequestLog { requestLogMethod       :: !Text
+             , requestLogPath         :: ![Text]
+             , requestLogQuery        :: !Text
+             , requestLogHeaders      :: ![LogHeader]
+             , requestLogRequestBody  :: !(Maybe Text)
+             , requestLogResponseCode :: !Int
+             , requestLogResponseBody :: !(Maybe Text)
+             , requestLogIP           :: !(Maybe Text)
+             } deriving (Show, Typeable, Data, Generic)
 
--- Aeson.deriveJSON (aesonTHOptions "requestLog") ''RequestLog
+Aeson.deriveJSON (aesonTHOptions "requestLog") ''RequestLog
 
--- instance LogMessage RequestLog where
---   messageType _ = "request"
+instance IsLogEvent RequestLog where
+  toLogEvent = eventDetails "request"
 
--- -- | Middleware for logging http requests and responses.
--- --
--- -- /NB/ The entirety of the request and response bodies are logged, which can be
--- -- very large
--- logHttpCalls :: (RequestLog -> IO ())
---                ->  Wai.Middleware
--- logHttpCalls logRequest app request' respond = do
---     -- We can't use (Wai.strictRequestBody request) because that consumes the
---     -- request body. TODO: Figure this out
---     (reqB, reqBody) <- do
---         body <- getBody (Wai.requestBody request') BS.empty
---         bdRef <- newIORef body
---         let rBody = do
---                 bd <- readIORef bdRef
---                 writeIORef bdRef BS.empty
---                 return  bd
---         return (rBody, if BS.null body then Nothing else Just body)
---     let request = request'{Wai.requestBody = reqB}
---     rr <- app request $ \response -> do
---         body <- responseToText response
---         logRequest
---           RequestLog { requestLogMethod       = bst $ Wai.requestMethod request
---                      , requestLogPath         = Wai.pathInfo request
---                      , requestLogQuery        = bst $ Wai.rawQueryString request
---                      , requestLogHeaders      =
---                          toLogHeaders $ Wai.requestHeaders request
---                      , requestLogRequestBody         = bst <$> reqBody
---                      , requestLogResponseCode =
---                          HTTP.statusCode $ Wai.responseStatus response
---                      , requestLogResponseBody = body
---                      , requestLogIP = bst <$> (List.lookup "X-Real-IP"
---                                                 $ Wai.requestHeaders request)
---                      }
---         respond response
---     return rr
---   where
---     getBody nextChunk acc = do
---         chunk <- nextChunk
---         if BS.null chunk
---             then return acc
---             else getBody nextChunk (acc <> chunk)
---     bst = Text.decodeUtf8With Text.lenientDecode
---     responseToText resp = do
---       ref <- newIORef []
---       case Wai.responseToStream resp of
---        (_, _, f) -> f $ \sb -> sb (\chunk -> modifyIORef ref (chunk:))
---                                   (return ())
---       chunks <- List.reverse <$> readIORef ref
---       let txt = Text.decodeUtf8With Text.lenientDecode
---                 . BSL.toStrict . BS.toLazyByteString $ mconcat chunks
---       return $ Just txt
+-- | Middleware for logging http requests and responses.
+--
+-- /NB/ The entirety of the request and response bodies are logged, which can be
+-- very large
+logHttpCalls :: (RequestLog -> IO ())
+               ->  Wai.Middleware
+logHttpCalls logRequest app request' respond = do
+    -- We can't use (Wai.strictRequestBody request) because that consumes the
+    -- request body. TODO: Figure this out
+    (reqB, reqBody) <- do
+        body <- getBody (Wai.requestBody request') BS.empty
+        bdRef <- newIORef body
+        let rBody = do
+                bd <- readIORef bdRef
+                writeIORef bdRef BS.empty
+                return  bd
+        return (rBody, if BS.null body then Nothing else Just body)
+    let request = request'{Wai.requestBody = reqB}
+    rr <- app request $ \response -> do
+        body <- responseToText response
+        logRequest
+          RequestLog { requestLogMethod       = bst $ Wai.requestMethod request
+                     , requestLogPath         = Wai.pathInfo request
+                     , requestLogQuery        = bst $ Wai.rawQueryString request
+                     , requestLogHeaders      =
+                         toLogHeaders $ Wai.requestHeaders request
+                     , requestLogRequestBody         = bst <$> reqBody
+                     , requestLogResponseCode =
+                         HTTP.statusCode $ Wai.responseStatus response
+                     , requestLogResponseBody = body
+                     , requestLogIP = bst <$> (List.lookup "X-Real-IP"
+                                                $ Wai.requestHeaders request)
+                     }
+        respond response
+    return rr
+  where
+    getBody nextChunk acc = do
+        chunk <- nextChunk
+        if BS.null chunk
+            then return acc
+            else getBody nextChunk (acc <> chunk)
+    bst = Text.decodeUtf8With Text.lenientDecode
+    responseToText resp = do
+      ref <- newIORef []
+      case Wai.responseToStream resp of
+       (_, _, f) -> f $ \sb -> sb (\chunk -> modifyIORef ref (chunk:))
+                                  (return ())
+      chunks <- List.reverse <$> readIORef ref
+      let txt :: Text
+          txt = Text.decodeUtf8With Text.lenientDecode
+                  . BSL.toStrict . BS.toLazyByteString $ mconcat chunks
+      return $ Just txt
 
 --------------------------------------------------------------------------------
 -- Critical Event --------------------------------------------------------------

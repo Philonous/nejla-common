@@ -15,7 +15,7 @@
 -- 'ToHttpApiData'.
 module NejlaCommon ( module NejlaCommon.Wai
                    , module NejlaCommon.Persistence
-                   , module NejlaCommon.Persistence.Logging
+                   , module NejlaCommon.Logging
                    , module NejlaCommon.Helpers
                    , DerivedData(..)
                    , WithField(..)
@@ -63,7 +63,7 @@ import qualified Data.Text.Encoding as TS
 import           NejlaCommon.Config
 import           NejlaCommon.Helpers
 import           NejlaCommon.Persistence
-import           NejlaCommon.Persistence.Logging
+import           NejlaCommon.Logging
 import           NejlaCommon.Wai
 
 
