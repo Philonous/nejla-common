@@ -101,16 +101,16 @@ camelCaseFieldsReplacing replacements = camelCaseFields & lensField %~
                    (\lf -> \typeName fieldNames fieldName ->
                               substNames <$> lf typeName fieldNames fieldName)
   where
-    substNames (TopName name) = TopName (fixName name)
+    substNames (TopName name) = TopName (fixName replacements name)
     substNames (MethodName className methodName) =
-        MethodName className (fixName methodName)
-    fixName :: Name -> Name
-    fixName name =
-        let nb = nameBase name
-        in case HMap.lookup nb replacements of
-            Nothing -> name
-            Just replace -> mkName replace
+        MethodName className (fixName replacements methodName)
 
+fixName :: HashMap String String -> Name -> Name
+fixName replacements name =
+    let nb = nameBase name
+    in case HMap.lookup nb replacements of
+        Nothing -> name
+        Just replace -> mkName replace
 
 camelCaseFields' :: LensRules
 camelCaseFields' = camelCaseFieldsReplacing defaultReplacements
