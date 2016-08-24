@@ -15,8 +15,8 @@ cabal-version:      >=1.10
 library
   exposed-modules:  NejlaCommon
                   , NejlaCommon.Config
-  other-modules:    NejlaCommon.Helpers
-                  , NejlaCommon.Logging
+                  , NejlaCommon.Helpers
+  other-modules:    NejlaCommon.Logging
                   , NejlaCommon.Persistence
                   , NejlaCommon.Wai
   build-depends:    aeson
@@ -64,9 +64,11 @@ test-suite tests
   type: exitcode-stdio-1.0
   hs-source-dirs: tests
   main-is:        Test.hs
-  other-modules:  Persistent.Common
-                , Persistent.Serializable
-                , Persistent.Logging
+  other-modules:  Logging
+                , Logstash
+                , Persistent.Common
+                , Persistent.Logstash
+                , Persistent.Serializablehas
   build-depends:  QuickCheck
                 , async
                 , base
@@ -83,9 +85,11 @@ test-suite tests
                 , persistent-postgresql
                 , persistent-template
                 , postgresql-simple
+                , shelly
                 , singletons
                 , tasty
                 , tasty-hunit
+                , tasty-quickcheck
                 , tasty-th
                 , text
                 , unordered-containers

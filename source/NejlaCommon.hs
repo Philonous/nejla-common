@@ -16,7 +16,6 @@
 module NejlaCommon ( module NejlaCommon.Wai
                    , module NejlaCommon.Persistence
                    , module NejlaCommon.Logging
-                   , module NejlaCommon.Helpers
                    , DerivedData(..)
                    , WithField(..)
                    , derivedType
