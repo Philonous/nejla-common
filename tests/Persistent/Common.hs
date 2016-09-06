@@ -52,21 +52,29 @@ run :: (MonadIO m, ('ReadCommitted :<= level) ~ 'True) =>
     -> ConnectionPool
     -> ReaderT SqlBackend IO a
     -> m a
-run level i pool m = liftIO
-             . runApp level conf pool ()
+run lvl i pool m = liftIO
+             . runApp lvl conf pool ()
              . withLevel $ db' m
   where
     conf :: SqlConfig
     conf = def & numRetries .~ i
 
 
-withDB :: (ConnectionPool -> IO a)
-       -> IO a
-withDB (f :: ConnectionPool -> IO a) = do
+withDB :: (ConnectionPool -> IO b) -> IO b
+withDB f = do
   mbDebug <- liftIO $ lookupEnv "DEBUG"
-  case mbDebug of
-    Nothing -> runNoLoggingT go
-    Just{} -> runStderrLoggingT go
+  let debug = case mbDebug of
+                Nothing -> False
+                Just{} -> True
+  withDB' debug f
+
+withDB' :: Bool
+        -> (ConnectionPool -> IO a)
+        -> IO a
+withDB' debug (f :: ConnectionPool -> IO a) = do
+  case debug of
+    False -> runNoLoggingT go
+    True -> runStderrLoggingT go
   where
     go :: (MonadIO m, MonadLogger m, MonadBaseControl IO m) => m a
     go = do
@@ -74,7 +82,7 @@ withDB (f :: ConnectionPool -> IO a) = do
         -- Setup database
         run readCommitted 0 pool $ do
           resetDB
-          runMigration migrateAll
+          runMigrationSilent migrateAll
           _ <- insert Foo { fooClass = 1, fooValue = 3}
           _ <- insert Foo { fooClass = 2, fooValue = 5}
           return ()
@@ -115,11 +123,9 @@ data Baton = Baton { number :: Int
 takeBaton :: MonadIO m => Baton -> m ()
 takeBaton baton = liftIO $ do
   takeMVar $ we baton
-  hPutStrLn stderr $ "Taking baton " ++ show (number baton)
 
 yieldBaton :: MonadIO m => Baton -> m ()
 yieldBaton baton = liftIO $ do
-  hPutStrLn stderr $ "Yielding baton " ++ show (number baton)
   putMVar (them baton) ()
 
 passBaton :: MonadIO m => Baton -> m ()

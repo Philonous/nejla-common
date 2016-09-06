@@ -67,14 +67,16 @@ test-suite tests
   other-modules:  Logging
                 , Logstash
                 , Persistent.Common
-                , Persistent.Logstash
-                , Persistent.Serializablehas
-  build-depends:  QuickCheck
+                , Persistent.Serializable
+  build-depends:  HUnit
+                , QuickCheck
+                , aeson
                 , async
                 , base
                 , bytestring
                 , data-default
                 , esqueleto
+                , fast-logger
                 , hspec-expectations
                 , lens
                 , monad-control
@@ -92,6 +94,7 @@ test-suite tests
                 , tasty-quickcheck
                 , tasty-th
                 , text
+                , time
                 , unordered-containers
 
   ghc-options: -threaded

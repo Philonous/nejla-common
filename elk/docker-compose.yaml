@@ -13,8 +13,8 @@ services:
   logstash:
     build: ./logstash
     volumes:
-      - $HOME/docker/elk/logstash.conf:/config-dir/logstash.conf
-    command: logstash -f /config-dir/logstash.conf
+      - ./logstash.conf.d:/etc/logstash/conf.d
+    command: logstash -f /etc/logstash/conf.d
     networks:
       - elk
     ports:

@@ -53,6 +53,7 @@ import           NejlaCommon.Helpers
 -- log messages
 data LogRow = LogRow { logRowTime    :: !UTCTime
                      , logRowEvent   :: !Text
+                     , logRowSource  :: !Text
                      , logRowDetails :: !Value
                      } deriving (Show, Eq)
 
@@ -61,6 +62,7 @@ instance ToJSON LogRow where
     let v = toJSON $ logRowDetails lr
         commons = [ "time"  .= logRowTime lr
                   , "event" .= logRowEvent lr
+                  , "source" .= logRowSource lr
                   ]
     in case v of
          Object o ->
@@ -71,15 +73,18 @@ instance FromJSON LogRow where
   parseJSON = withObject "log row" $ \o -> do
     tp <- o .: "event"
     time <- o .: "time"
+    source <- o .: "source"
     mbPayload <- o .:? "details"
     payload <- case mbPayload of
                  Nothing -> parseJSON . Object $
                              o // "event"
                                // "time"
+                               // "source"
                  Just pl -> return pl
     return LogRow { logRowTime    = time
                   , logRowEvent   = tp
                   , logRowDetails = payload
+                  , logRowSource  = source
                   }
       where
          infixl 8 //
@@ -152,7 +157,7 @@ logEvent :: (MonadIO m, MonadLogger m, IsLogEvent a) =>
          -> m ()
 logEvent (toLogEvent -> lEvent)= do
   row <- liftIO toLogRow
-  logWithoutLoc (lEvent ^. source) (lEvent ^. level) $ encodeText row
+  logWithoutLoc "json_event" (lEvent ^. level) $ encodeText row
 
   where
     logWithoutLoc = monadLoggerLog defaultLoc
@@ -167,6 +172,7 @@ logEvent (toLogEvent -> lEvent)= do
       return LogRow{ logRowTime    = time'
                    , logRowEvent   = lEvent ^. type'
                    , logRowDetails = lEvent ^. details
+                   , logRowSource  = lEvent ^. source
                    }
 
 --------------------------------------------------------------------------------

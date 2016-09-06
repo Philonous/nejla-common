@@ -1,0 +1,10 @@
+version: '2'
+
+services:
+  logstash:
+    build: ../../elk/logstash
+    volumes:
+      - ./conf.d/1-input-stdin.conf:/etc/logstash/conf.d/3-input-stdin.conf
+      - ./conf.d/2-filter-parse-logs.conf:/etc/logstash/conf.d/2-filter-parse-logs.conf
+      - ./conf.d/3-output-stdout.conf:/etc/logstash/conf.d/1-output-stdout.conf
+    command: logstash -f /etc/logstash/conf.d
