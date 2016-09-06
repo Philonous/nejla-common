@@ -114,6 +114,7 @@ case_logstash = do
         "type" `shouldDecodeTo` ("logs" :: Text)
         "component" `shouldDecodeTo` ("database" :: Text)
         "level" `shouldDecodeTo` (4 :: Int)
+        "message" `shouldDecodeTo` ("foo" :: Text)
     _ -> assertFailure $ "Expected 1 row, instead got "
                            <> unlines (Text.unpack <$> res)
   where
