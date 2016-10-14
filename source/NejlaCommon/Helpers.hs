@@ -49,7 +49,7 @@ cctu delim = go
       | isUpper c1 && isUpper c2 && isLower c3 =
           [toLower c1] ++ delim ++ [toLower c2] ++ go cs
     go (c1 : cs@(c2:_))
-      | isLower c1 && isUpper c2 = [c1] ++ delim ++ go cs
+      | (not $ isUpper c1) && isUpper c2 = [c1] ++ delim ++ go cs
       | otherwise = [toLower c1] ++ go cs
 
 -- | Remove a prefix from a String, throwing an error of the prefix is not found

@@ -68,6 +68,7 @@ test-suite tests
                 , Logstash
                 , Persistent.Common
                 , Persistent.Serializable
+                , Helpers
   build-depends:  HUnit
                 , QuickCheck
                 , aeson
