@@ -69,15 +69,18 @@ test-suite tests
                 , Persistent.Common
                 , Persistent.Serializable
                 , Helpers
+                , Config
   build-depends:  HUnit
                 , QuickCheck
                 , aeson
                 , async
                 , base
                 , bytestring
+                , configurator
                 , data-default
                 , esqueleto
                 , fast-logger
+                , formatting
                 , hspec-expectations
                 , lens
                 , monad-control
@@ -94,6 +97,7 @@ test-suite tests
                 , tasty-hunit
                 , tasty-quickcheck
                 , tasty-th
+                , temporary
                 , text
                 , time
                 , unordered-containers
