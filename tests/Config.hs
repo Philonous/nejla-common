@@ -36,7 +36,6 @@ withConf :: FilePath -> String ->  (Config -> IO b) -> IO b
 withConf confFile value f = do
   let c = mkConfig value
   LText.writeFile confFile $ mkConfig value
-  LText.putStrLn =<< LText.readFile confFile
   setEnv "CONF_PATH" confFile
   conf <- loadConf ""
   res <- f conf
