@@ -39,6 +39,7 @@ module NejlaCommon.Persistence
   , HasRetryMinDelay(..)
   , HasRetryMaxDelay(..)
   , HasRetryableErrors(..)
+  , HasUseTransactionLevels(..)
   , runApp
   , readCommitted
   , serializable
@@ -222,7 +223,7 @@ data SqlConfig = SqlConfig { -- | How often to retry the transaction (0 to
 -- , "40P01" -- deadlock_detected
 -- ]
                            , sqlConfigRetryableErrors :: ![ByteString]
-                           , sqlConfigUseTransactionLevel :: !Bool
+                           , sqlConfigUseTransactionLevels :: !Bool
                            }
 
 makeLensesWith camelCaseFields ''SqlConfig
@@ -235,7 +236,7 @@ defaultSqlConfig = SqlConfig { sqlConfigNumRetries = 3
                                =  [ "40001" -- serialization_failure
                                   , "40P01" -- deadlock_detected
                                   ]
-                             , sqlConfigUseTransactionLevel = True
+                             , sqlConfigUseTransactionLevels = True
                              }
 
 instance Default SqlConfig where
@@ -251,7 +252,7 @@ runApp :: Sing l -- ^ mode to run the transaction in (see 'serializable',
        -> IO a
 runApp tLevel conf pool ust ((App m) :: App st p l a) =
   flip runSqlPool pool $ do
-    when (conf L.^. useTransactionLevel) $
+    when (conf L.^. useTransactionLevels) $
       setTransactionLevel (fromSing tLevel)
     con <- ask
     let st = AppState { appStateConnection = con
@@ -274,9 +275,6 @@ runApp tLevel conf pool ust ((App m) :: App st p l a) =
               threadDelay delay
               go con st retryCounter
             False -> Ex.throwM e
-
-
-
 
 -- | Run the transaction in serializable mode
 serializable :: Sing 'Serializable
