@@ -222,6 +222,7 @@ data SqlConfig = SqlConfig { -- | How often to retry the transaction (0 to
 -- , "40P01" -- deadlock_detected
 -- ]
                            , sqlConfigRetryableErrors :: ![ByteString]
+                           , sqlConfigUseTransactionLevel :: !Bool
                            }
 
 makeLensesWith camelCaseFields ''SqlConfig
@@ -234,6 +235,7 @@ defaultSqlConfig = SqlConfig { sqlConfigNumRetries = 3
                                =  [ "40001" -- serialization_failure
                                   , "40P01" -- deadlock_detected
                                   ]
+                             , sqlConfigUseTransactionLevel = True
                              }
 
 instance Default SqlConfig where
@@ -249,7 +251,8 @@ runApp :: Sing l -- ^ mode to run the transaction in (see 'serializable',
        -> IO a
 runApp tLevel conf pool ust ((App m) :: App st p l a) =
   flip runSqlPool pool $ do
-    setTransactionLevel (fromSing tLevel)
+    when (conf L.^. useTransactionLevel) $
+      setTransactionLevel (fromSing tLevel)
     con <- ask
     let st = AppState { appStateConnection = con
                       , appStateUserState = ust
