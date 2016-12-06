@@ -241,3 +241,35 @@ output {
     }
 }
 ```
+
+# Warnings
+
+Warnings can catch errors early. To make them useful, projects should be kept
+warning-clean during development, so all code should be compiled with
+all warnings enabled by adding:
+
+```
+  ghc-options:      -Wall
+```
+
+to each library, executable and test-suite section.
+
+Warnings should only be disabled when fixing them is infeasible on a by-need
+basis. preferably by adding the appropriate pragma to the respective source file:
+
+
+```
+{-# OPTIONS_GHC -fno-warn-orphans -#}
+{-# OPTIONS_GHC -fno-warn-type-defaults -#}
+```
+
+or disabling them for the whole section if those pragmas would be used in many
+source files:
+
+```
+  ghc-options:      -Wall -fno-warn-orphans
+```
+
+## Likely candidates for suppression
+* -fno-warn-orphans
+* -fno-warn-type-defaults
