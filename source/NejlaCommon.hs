@@ -42,7 +42,7 @@ import           Data.Time.Clock
 import           Data.Time.Format
 import qualified Data.UUID as UUID
 import           Database.Persist.Postgresql
-import           GHC.Generics
+import           GHC.Generics (Generic)
 import           GHC.TypeLits
 import           Generics.Generic.Aeson
 import           Language.Haskell.TH
@@ -97,15 +97,6 @@ instance PathPiece UUID.UUID where
 
 instance Rest.Info UUID.UUID where
     describe _ = "uuid"
-
-instance ToHttpApiData UUID.UUID where
-    toUrlPiece = toPathPiece
-
-instance FromHttpApiData UUID.UUID where
-    parseUrlPiece txt =
-        case fromPathPiece txt of
-         Nothing -> Left $ "Invalid UUID: " <> txt
-         Just uuid -> Right uuid
 
 -- | Acquires the database password (from the 'DB_PASSWORD' environment
 -- variable) and creates a PostgreSQL connection pool with the specified number
@@ -172,7 +163,7 @@ mkGenericJson tp = do
 -- | 'mkJsonType' is 'derivedType' in combination with 'mkGenericJSON'.
 mkJsonType :: Name -> DerivedData -> Q [Dec]
 mkJsonType name dd = do
-    tp@(DataD _ name' _ _ _:_) <- derivedType name dd
+    tp@(DataD _ name' _ _ _ _:_) <- derivedType name dd
     instances <- mkGenericJson (return $ ConT name')
     return $ tp ++ instances
 
@@ -180,14 +171,16 @@ mkJsonType name dd = do
 data DerivedData = DD { derivedPrefix :: String
                       , removeFields :: [String]
                       , optionalFields :: [String]
-                      , derive :: [Name]
+                      , derive :: Cxt
                       }
 
 instance Default DerivedData where
     def = DD { derivedPrefix = ""
              , removeFields = []
              , optionalFields = []
-             , derive = [''Show, ''Eq, ''Data, ''Typeable, ''Generic ]
+             , derive =
+                 ConT <$>
+                 [''Show, ''Eq, ''Data, ''Typeable, ''Generic ]
              }
 
 -- | Create a derived type. Takes a type name and adds the 'derivedPrefix' value
@@ -218,7 +211,7 @@ derivedType tname DD{ derivedPrefix = pre
     let uPre = upcase pre
         removePre = downcase $ nameBase tname
     case info of
-     TyConI (DataD [] name [] [RecC cName cFields] _) -> do
+     TyConI (DataD [] name [] _ [RecC cName cFields] _) -> do
          let filterField excluded (nm, _, _) =
                  let name = nameBase nm
                  in and [ name `notIn` excluded
@@ -227,7 +220,7 @@ derivedType tname DD{ derivedPrefix = pre
                           `notIn` excluded
                         ]
              addFieldPrefix fs = [ ( mkName $ pre <> upcase (nameBase nm)
-                                   , IsStrict
+                                   , Strict
                                    , tp)
                                  | (nm, _, tp) <- fs
                                  ]
@@ -238,15 +231,16 @@ derivedType tname DD{ derivedPrefix = pre
              fullFields = fst3 <$> fullFields'
              maybeFields = fst3 <$> maybeFields'
              removedFields = fst3 <$> removedFields'
-             cs = [ ( mkName $ pre <> upcase (nameBase nm) , IsStrict , tp)
+             isStrict = Bang NoSourceUnpackedness SourceStrict
+             cs = [ ( mkName $ pre <> upcase (nameBase nm) , isStrict , tp)
                   | (nm, _, tp) <- fullFields' ]
-             ms = [ ( mkName $ pre <> upcase (nameBase nm) , IsStrict
+             ms = [ ( mkName $ pre <> upcase (nameBase nm) , isStrict
                                                            , AppT (ConT ''Maybe)
                                                                   tp)
                   | (nm, _, tp) <- maybeFields' ]
              cName' = (mkName $ uPre ++ nameBase name)
              dt = DataD [] (mkName $ uPre <> (nameBase cName)) []
-                          [RecC cName' (cs ++ ms)] derive
+                          Nothing [RecC cName' (cs ++ ms)] derive
              fromFunName = mkName $ concat [ "from"
                                            , (upcase pre)
                                            , nameBase name
@@ -314,7 +308,7 @@ derivedType' name DD{ derivedPrefix = pre
     let uPre = upcase pre
         removePre = takeWhile isLower . downcase $ nameBase name
     case info of
-     TyConI (DataD [] name [] [RecC cName cFields] _) ->
+     TyConI (DataD [] name [] _ [RecC cName cFields] _) ->
           let cs = [ ( mkName $ pre <> upcase name
                     , s, tp)
                   | (nm, s, tp) <- cFields
@@ -324,7 +318,7 @@ derivedType' name DD{ derivedPrefix = pre
                   , downcase (fromMaybe "" (L.stripPrefix removePre name))
                        `notIn` rf
                   ]
-         in return $ [DataInstD [] (mkName "AddResource") [ConT name]
+         in return $ [DataInstD [] (mkName "AddResource") [ConT name] Nothing
                         [RecC cName cFields] []]
      _ -> error "mkAddCall only works on single-record-constructor types"
 

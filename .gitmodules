@@ -1,0 +1,3 @@
+[submodule "esqueleto"]
+	path = esqueleto
+	url = https://github.com/Philonous/esqueleto.git

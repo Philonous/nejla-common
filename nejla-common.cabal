@@ -30,7 +30,7 @@ library
                   , exceptions >= 0.8
                   , fast-logger
                   , generic-aeson
-                  , http-api-data
+                  , http-api-data >= 0.3.1
                   , http-types >= 0.9
 -- https://github.com/aslatter/uuid/issues/19
                   , json-schema
@@ -47,7 +47,7 @@ library
                   , resourcet
                   , rest-types
                   , singletons >= 1.1
-                  , template-haskell
+                  , template-haskell >= 2.11
                   , text
                   , time >= 1.5
                   , transformers
