@@ -87,38 +87,43 @@ module NejlaCommon.Persistence
   , foreignKeyR
   , foreignKeyRMaybe
   , onForeignKey
+  -- * Human-readable IDs
+  , mkRandomHrID
+  , mkUniqueRandomHrID
   ) where
 
 import           Control.Applicative
 import           Control.Concurrent
-import qualified Control.Lens as L
+import qualified Control.Lens                    as L
 import           Control.Lens.TH
 import           Control.Monad.Base
-import qualified Control.Monad.Catch as Ex
+import qualified Control.Monad.Catch             as Ex
 import           Control.Monad.Logger
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Control
-import qualified Data.Aeson as Aeson
-import           Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
+import qualified Data.Aeson                      as Aeson
+import           Data.ByteString                 (ByteString)
+import qualified Data.ByteString                 as BS
 import           Data.Data
 import           Data.Default
-import qualified Data.Foldable as Foldable
+import qualified Data.Foldable                   as Foldable
 import           Data.IORef
-import qualified Data.List as List
-import           Data.Maybe (catMaybes)
+import qualified Data.List                       as List
+import           Data.Maybe                      (catMaybes)
 import           Data.Monoid
 import           Data.Singletons
 import           Data.Singletons.TH
-import           Data.Text (Text)
+import           Data.Text                       (Text)
+import qualified Data.Text                       as Text
 import           Data.Time
-import           Data.UUID (UUID)
-import           Database.Esqueleto as E
+import           Data.UUID                       (UUID)
+import           Database.Esqueleto              as E
 import           Database.Esqueleto.Internal.Sql
-import qualified Database.PostgreSQL.Simple as Postgres
+import qualified Database.PostgreSQL.Simple      as Postgres
 import           GHC.Generics
 import           System.Log.FastLogger
 import           System.Random
+import           System.Random.Shuffle
 
 --------------------------------------------------------------------------------
 -- SQL Monad -------------------------------------------------------------------
@@ -627,3 +632,41 @@ foreignKeyRMaybe x y =
 onForeignKey :: (Esqueleto query expr backend, ForeignKey a b) =>
                 expr (Entity a) -> expr (Entity b) -> query ()
 onForeignKey x y = on $ foreignKey x y
+
+--------------------------------------------------------------------------------
+-- ID generation ---------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+hrIDDigits :: [Char]
+hrIDDigits = "2345679"
+
+hrIDChars :: [Char]
+hrIDChars = "CDFGHJKLMNPQRSTVWXYZ" ++ hrIDDigits
+
+-- | Generate a random human-readable ID.
+mkRandomHrID :: Int -> IO Text
+mkRandomHrID len = do
+    chars <- replicateM (len - 1) $ selectOne hrIDChars
+    digit <- selectOne hrIDDigits
+    Text.pack <$> shuffleM (digit : chars)
+  where
+    selectOne xs = do
+        i <- randomRIO (0, length xs - 1)
+        return $ xs !! i
+
+-- | Generate a random human-readable ID and make sure it doesn't exist in the database
+mkUniqueRandomHrID :: ( PersistField typ
+                      , PersistEntity val
+                      , PersistEntityBackend val ~ SqlBackend) =>
+                      (Text -> typ)
+                   -> Int
+                   -> EntityField val typ
+                   -> App st 'Unprivileged 'ReadCommitted typ
+mkUniqueRandomHrID fromCandidate len field = do
+    candidate <- liftIO $ mkRandomHrID len
+    [Value rows] <- db . select . E.from $ \o -> do
+        where_ $ o ^. field ==. val (fromCandidate candidate)
+        return $ countRows
+    if (rows :: Rational) > 0
+        then mkUniqueRandomHrID fromCandidate len field
+        else return $ fromCandidate candidate

@@ -44,6 +44,7 @@ library
                   , persistent-template
                   , postgresql-simple
                   , random
+                  , random-shuffle
                   , resourcet
                   , rest-types
                   , singletons >= 1.1
