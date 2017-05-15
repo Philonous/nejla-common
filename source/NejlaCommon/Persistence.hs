@@ -35,6 +35,7 @@ module NejlaCommon.Persistence
   , db
   , db'
   , SqlConfig (..)
+  , defaultSqlConfig
   , HasNumRetries(..)
   , HasRetryMinDelay(..)
   , HasRetryMaxDelay(..)
