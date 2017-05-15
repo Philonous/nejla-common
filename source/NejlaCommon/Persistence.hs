@@ -84,6 +84,7 @@ module NejlaCommon.Persistence
   , fromListNotFound
   -- * Uniquenes Constraints
   , PersistError(..)
+  , responseCode
   , DescribeUnique(..)
   , conflict
   , insertUniqueConflict
@@ -410,6 +411,17 @@ instance ToJSON PersistError where
     toJSON DBError =
         object [ "error" ..= "database error"
                ]
+
+
+responseCode :: PersistError -> Int
+responseCode Conflict{}                 = 409
+responseCode JSONDeserializationError{} = 400
+responseCode ValueBound{}               = 400
+responseCode Policy{}                   = 403
+responseCode EntityNotFound{}           = 404
+responseCode ForeignKey{}               = 409
+responseCode Check{}                    = 409
+responseCode DBError{}                  = 500
 
 instance Ex.Exception PersistError
 
