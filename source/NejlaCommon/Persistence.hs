@@ -1,7 +1,7 @@
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE StandaloneDeriving #-}
 -- Copyright © 2014-2015 Lambdatrade AB. All rights reserved.
 
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -74,8 +74,15 @@ module NejlaCommon.Persistence
   , sqlFormatTime
   , deferrConstraints
   , undeferrConstraints
+  -- * Not Found
+  , notFound
+  , getNotFound
+  , getByNotFound
+  , getByNotFound'
+  , fromMaybeNotFound
+  , fromListNotFound
   -- * Uniquenes Constraints
-  , Conflict(..)
+  , PersistError(..)
   , DescribeUnique(..)
   , conflict
   , insertUniqueConflict
@@ -92,7 +99,6 @@ module NejlaCommon.Persistence
   , mkUniqueRandomHrID
   ) where
 
-import           Control.Applicative
 import           Control.Concurrent
 import qualified Control.Lens                    as L
 import           Control.Lens.TH
@@ -102,14 +108,14 @@ import           Control.Monad.Logger
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Control
 import qualified Data.Aeson                      as Aeson
+import           Data.Aeson                      hiding (Value)
 import           Data.ByteString                 (ByteString)
-import qualified Data.ByteString                 as BS
 import           Data.Data
 import           Data.Default
 import qualified Data.Foldable                   as Foldable
 import           Data.IORef
 import qualified Data.List                       as List
-import           Data.Maybe                      (catMaybes)
+import           Data.Maybe                      (catMaybes, maybeToList)
 import           Data.Monoid
 import           Data.Singletons
 import           Data.Singletons.TH
@@ -121,7 +127,6 @@ import           Database.Esqueleto              as E
 import           Database.Esqueleto.Internal.Sql
 import qualified Database.PostgreSQL.Simple      as Postgres
 import           GHC.Generics
-import           System.Log.FastLogger
 import           System.Random
 import           System.Random.Shuffle
 
@@ -349,6 +354,65 @@ forkApp (App m) = do
   return ()
 
 --------------------------------------------------------------------------------
+-- Errors ----------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+data PersistError = EntityNotFound !Text !Text -- Entity type and name
+                  | Conflict !Text ![(Text, Text)] -- entity type and fields
+                  | JSONDeserializationError !Text
+                  | ValueBound !Text
+                  | Policy !Text
+                  | ForeignKey !Text !Text -- Table and field
+                  | Check !Text !Text
+                  | DBError
+                  deriving (Show, Eq, Ord, Data, Typeable, Generic)
+
+(..=) :: Text -> Text -> (Text, Aeson.Value)
+(..=) = (.=)
+
+instance ToJSON PersistError where
+    toJSON (Conflict entity fields) =
+        object [ "error" ..= "conflict"
+               , "entity" ..= entity
+               , "fields" .= (fieldToJSON <$> fields)
+               ]
+      where
+        fieldToJSON (fieldname, value') =
+            object [ "field" ..= fieldname
+                   , "value" ..= value'
+                   ]
+    toJSON (JSONDeserializationError e) =
+        object [ "error" ..= "deserialization error"
+               , "message" .= e
+               ]
+    toJSON (ValueBound e) = object [ "error" ..= "out of bounds"
+                                   , "message" .= e
+                                   ]
+    toJSON (Policy e) = object [ "error" ..= "policy violation"
+                               , "message" .= e
+                               ]
+    toJSON (EntityNotFound tp v) =
+        object [ "error" ..= "not found"
+               , "type" .= tp
+               , "entity" .= v
+               ]
+    toJSON (ForeignKey table field) =
+        object [ "error" ..= "foreign constraint"
+               , "table" ..= table
+               , "field" ..= field
+               ]
+    toJSON (Check table constraint) =
+        object [ "error" ..= "check constraint"
+               , "table" ..= table
+               , "constraint" ..= constraint
+               ]
+    toJSON DBError =
+        object [ "error" ..= "database error"
+               ]
+
+instance Ex.Exception PersistError
+
+--------------------------------------------------------------------------------
 -- Persistence Helpers ---------------------------------------------------------
 --------------------------------------------------------------------------------
 
@@ -479,19 +543,19 @@ undeferrConstraints = rawExecute "SET CONSTRAINTS ALL IMMEDIATE;" []
 -- Uniquenes Constraints -------------------------------------------------------
 --------------------------------------------------------------------------------
 
--- | Exception thrown when a data conflict occurs
-data Conflict = Conflict { conflictType :: !Text
-                           -- ^ The type of the entity producing the context
-                           -- (e.g. the name of the entity)
-                         , conflictFields :: ![(Text, Text)]
-                           -- ^ The fields of the entity that contribute to the
-                           -- conflict
-                         } deriving (Show, Typeable, Data, Generic)
+-- -- | Exception thrown when a data conflict occurs
+-- data Conflict = Conflict { conflictType :: !Text
+--                            -- ^ The type of the entity producing the context
+--                            -- (e.g. the name of the entity)
+--                          , conflictFields :: ![(Text, Text)]
+--                            -- ^ The fields of the entity that contribute to the
+--                            -- conflict
+--                          } deriving (Show, Typeable, Data, Generic)
 
-instance Ex.Exception Conflict
+-- instance Ex.Exception Conflict
 
 -- | Describe a Uniqueness constraint. Used e.g. to automatically create
--- Congflict exceptions on insertion
+-- Conflict exceptions on insertion
 class PersistEntity a => DescribeUnique a where
     -- | The type/name of the uniqueness constraint
     uniqueType :: Unique a -> Text
@@ -500,7 +564,7 @@ class PersistEntity a => DescribeUnique a where
 
 
 -- | Throw a conflict exception calculated from a uniqueness constraint.
-conflict :: DescribeUnique a => Unique a -> Conflict
+conflict :: DescribeUnique a => Unique a -> PersistError
 conflict descr = Conflict (uniqueType descr) (uniqueFieldNames descr)
 
 -- | Insert a value, throwing a Conflict exception when a uniqueness constraint
@@ -526,6 +590,51 @@ replaceUniqueConflict k v = do
     case mbCfl of
      Nothing -> return ()
      Just cfl -> liftIO . Ex.throwM $ conflict cfl
+
+--------------------------------------------------------------------------------
+-- Getters with possible 404s --------------------------------------------------
+--------------------------------------------------------------------------------
+
+
+notFound :: (MonadIO m, Show a) => Text -> a -> m b
+notFound entType entName =
+    liftIO . Ex.throwM $ EntityNotFound entType (Text.pack $ show entName)
+
+getByNotFound :: (PersistEntity val, Show a,
+                  PersistEntityBackend val ~ SqlBackend) =>
+                 Text -> a -> Unique val -> App st 'Unprivileged 'ReadCommitted (Entity val)
+getByNotFound entType entName p = do
+    g <- db $ getBy p
+    case g of
+        Nothing -> notFound entType entName
+        Just e -> return e
+
+getByNotFound' :: (DescribeUnique val, PersistEntityBackend val ~ SqlBackend) =>
+                  Unique val
+               -> App st 'Unprivileged 'ReadCommitted (Entity val)
+getByNotFound' p = getByNotFound (uniqueType p) (uniqueFieldNames p) p
+
+getNotFound :: (PersistEntity b, PersistEntityBackend b ~ SqlBackend) =>
+               Text -> Key b -> App st 'Unprivileged 'ReadCommitted b
+getNotFound entType p = do
+    g <- db $ get p
+    case g of
+        Nothing -> notFound entType p
+        Just e -> return e
+
+-- | Get the first element from a List of results or throw EntityNotFound if the
+-- list is Empty
+--
+-- Throws: ApiFailure
+fromListNotFound :: (Ex.MonadThrow m, Show a) => Text -> a -> [b] -> m b
+fromListNotFound entType entName [] =
+  Ex.throwM $ EntityNotFound entType (Text.pack $ show entName)
+fromListNotFound _entType _entName (x:_) = return x
+
+fromMaybeNotFound :: (Show a, Ex.MonadThrow m) => Text -> a -> Maybe b -> m b
+fromMaybeNotFound entType entName item' =
+  fromListNotFound entType entName (maybeToList item')
+
 
 --------------------------------------------------------------------------------
 -- Foreign Key Relationships ---------------------------------------------------
