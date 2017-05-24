@@ -16,11 +16,12 @@ library
   exposed-modules:  NejlaCommon
                   , NejlaCommon.Config
                   , NejlaCommon.Helpers
+                  , NejlaCommon.Test
   other-modules:    NejlaCommon.Logging
                   , NejlaCommon.Persistence
                   , NejlaCommon.Wai
-  build-depends:    aeson
-                  , base >=4.7 && <5.0
+  build-depends:    base >=4.7 && <5.0
+                  , aeson
                   , binary
                   , bytestring
                   , case-insensitive >= 1.2
@@ -30,8 +31,12 @@ library
                   , exceptions >= 0.8
                   , fast-logger
                   , generic-aeson
+                  , hspec
+                  , hspec-wai
+                  , hspec-wai-json
                   , http-api-data >= 0.3.1
                   , http-types >= 0.9
+                  , HUnit
 -- https://github.com/aslatter/uuid/issues/19
                   , json-schema
                   , lens
