@@ -123,6 +123,7 @@ withPool conf n f = do
     dbUser <- getConf "DB_USER" "db.user" (Right "postgres") conf
     dbDatabase <- getConfMaybe "DB_DATABASE" "db.database" conf
     dbPassword <- getConfMaybe "DB_PASSWORD" "db.password" conf
+    dbPort <- getConfMaybe "DB_PORT" "db.port" conf
     let connectionString =
           BS.intercalate " "
           . catMaybes
@@ -130,6 +131,7 @@ withPool conf n f = do
               , "user"     ..= Just dbUser
               , "dbname"   ..= dbDatabase
               , "password" ..= dbPassword
+              , "port"     ..= dbPort
               ]
     withPostgresqlPool connectionString n $ f
   where
