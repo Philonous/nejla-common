@@ -133,6 +133,9 @@ withPool conf n f = do
               , "password" ..= dbPassword
               , "port"     ..= dbPort
               ]
+    $logDebug $ "Using connection string: \""
+                <> (Text.decodeUtf8 connectionString) <> "\""
+
     withPostgresqlPool connectionString n $ f
   where
     k ..= (Just v) = Just $ k <> "=" <> (Text.encodeUtf8 v)
