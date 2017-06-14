@@ -45,10 +45,8 @@ import           Database.Persist.Postgresql
 import           GHC.Generics (Generic)
 import           GHC.TypeLits
 import           Generics.Generic.Aeson
-import           Language.Haskell.TH
-import           Language.Haskell.TH.Syntax
-import           System.Environment
-import           Web.HttpApiData
+import           Language.Haskell.TH as TH
+import           Language.Haskell.TH.Syntax as TH
 import           Web.PathPieces
 
 import qualified Data.ByteString as BS
@@ -57,7 +55,6 @@ import qualified Data.JSON.Schema as Schema
 import qualified Data.List as L
 import qualified Data.Text as TS
 import qualified Rest.Types.Info as Rest
-import qualified Data.Text.Encoding as TS
 
 import           NejlaCommon.Config
 import           NejlaCommon.Helpers
@@ -166,7 +163,7 @@ mkGenericJson tp = do
                       ]
 
 -- | 'mkJsonType' is 'derivedType' in combination with 'mkGenericJSON'.
-mkJsonType :: Name -> DerivedData -> Q [Dec]
+mkJsonType :: TH.Name -> DerivedData -> Q [Dec]
 mkJsonType name dd = do
     tp@(DataD _ name' _ _ _ _:_) <- derivedType name dd
     instances <- mkGenericJson (return $ ConT name')
@@ -206,7 +203,7 @@ instance Default DerivedData where
 -- @
 --
 -- (The above assumes that the field bar is of type 'Int'.)
-derivedType :: Name -> DerivedData -> Q [Dec]
+derivedType :: TH.Name -> DerivedData -> Q [Dec]
 derivedType tname DD{ derivedPrefix = pre
                     , removeFields = rf
                     , optionalFields = mf
@@ -224,11 +221,6 @@ derivedType tname DD{ derivedPrefix = pre
                                     (L.stripPrefix removePre name))
                           `notIn` excluded
                         ]
-             addFieldPrefix fs = [ ( mkName $ pre <> upcase (nameBase nm)
-                                   , Strict
-                                   , tp)
-                                 | (nm, _, tp) <- fs
-                                 ]
              (keptFields, removedFields') = L.partition (filterField rf)
                                              cFields
              (fullFields', maybeFields') = L.partition (filterField mf)
@@ -304,28 +296,28 @@ derivedType tname DD{ derivedPrefix = pre
 
 -- Associated data declaration in IsResource class.
 -- A bug in ghc prevents this from being used for now.
-derivedType' :: Name -> DerivedData -> Q [Dec]
-derivedType' name DD{ derivedPrefix = pre
-                    , removeFields = rf
-                    , derive = derive
-                    } = do
-    info <- reify name
-    let uPre = upcase pre
-        removePre = takeWhile isLower . downcase $ nameBase name
-    case info of
-     TyConI (DataD [] name [] _ [RecC cName cFields] _) ->
-          let cs = [ ( mkName $ pre <> upcase name
-                    , s, tp)
-                  | (nm, s, tp) <- cFields
-                  , name <- [nameBase nm]
-                  , name `notIn` rf
-                    -- Drop the type name as a prefix
-                  , downcase (fromMaybe "" (L.stripPrefix removePre name))
-                       `notIn` rf
-                  ]
-         in return $ [DataInstD [] (mkName "AddResource") [ConT name] Nothing
-                        [RecC cName cFields] []]
-     _ -> error "mkAddCall only works on single-record-constructor types"
+-- derivedType' :: TH.Name -> DerivedData -> Q [Dec]
+-- derivedType' name DD{ derivedPrefix = pre
+--                     , removeFields = rf
+--                     , derive = derive
+--                     } = do
+--     info <- reify name
+--     let uPre = upcase pre
+--         removePre = takeWhile isLower . downcase $ nameBase name
+--     case info of
+--      TyConI (DataD [] name [] _ [RecC cName cFields] _) ->
+--           let cs = [ ( mkName $ pre <> upcase name
+--                     , s, tp)
+--                   | (nm, s, tp) <- cFields
+--                   , name <- [nameBase nm]
+--                   , name `notIn` rf
+--                     -- Drop the type name as a prefix
+--                   , downcase (fromMaybe "" (L.stripPrefix removePre name))
+--                        `notIn` rf
+--                   ]
+--          in return $ [DataInstD [] (mkName "AddResource") [ConT name] Nothing
+--                         [RecC cName cFields] []]
+--      _ -> error "mkAddCall only works on single-record-constructor types"
 
 -- Used by derivedType{,'}. Not exported.
 notIn :: Eq a => a -> [a] -> Bool

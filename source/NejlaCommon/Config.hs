@@ -14,9 +14,9 @@ module NejlaCommon.Config
   , getConfBoolMaybe
   , loadConf
   , Conf.Config
+  , Conf.Name
   ) where
 
-import           Control.Applicative
 import           Control.Monad.Logger
 import           Control.Monad.Trans
 import qualified Data.Char as Char
