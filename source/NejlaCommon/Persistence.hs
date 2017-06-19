@@ -102,32 +102,35 @@ module NejlaCommon.Persistence
   ) where
 
 import           Control.Concurrent
-import qualified Control.Lens                    as L
+import qualified Control.Lens                      as L
 import           Control.Lens.TH
 import           Control.Monad.Base
-import qualified Control.Monad.Catch             as Ex
+import qualified Control.Monad.Catch               as Ex
 import           Control.Monad.Logger
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Control
-import qualified Data.Aeson                      as Aeson
-import           Data.Aeson                      hiding (Value)
-import           Data.ByteString                 (ByteString)
+import qualified Data.Aeson                        as Aeson
+import           Data.Aeson                        hiding (Value)
+import           Data.ByteString                   (ByteString)
 import           Data.Data
 import           Data.Default
-import qualified Data.Foldable                   as Foldable
+import qualified Data.Foldable                     as Foldable
 import           Data.IORef
-import qualified Data.List                       as List
-import           Data.Maybe                      (catMaybes, maybeToList)
+import qualified Data.List                         as List
+import           Data.Maybe                        (catMaybes, maybeToList)
 import           Data.Monoid
 import           Data.Singletons
 import           Data.Singletons.TH
-import           Data.Text                       (Text)
-import qualified Data.Text                       as Text
+import           Data.Text                         (Text)
+import qualified Data.Text                         as Text
+import qualified Data.Text.Encoding                as Text
+import qualified Data.Text.Encoding.Error          as Text
 import           Data.Time
-import           Data.UUID                       (UUID)
-import           Database.Esqueleto              as E
+import           Data.UUID                         (UUID)
+import           Database.Esqueleto                as E
 import           Database.Esqueleto.Internal.Sql
-import qualified Database.PostgreSQL.Simple      as Postgres
+import qualified Database.PostgreSQL.Simple        as Postgres
+import           Database.PostgreSQL.Simple.Errors
 import           GHC.Generics
 import           System.Random
 import           System.Random.Shuffle
@@ -270,22 +273,30 @@ runApp tLevel conf pool ust ((App m) :: App st p l a) =
     let st = AppState { appStateConnection = con
                       , appStateUserState = ust
                       }
-    retryCounter <- liftIO $ newIORef (conf L.^. numRetries)
-    liftIO $ go con st retryCounter
+    liftIO $ Ex.catch (go con st $ conf L.^. numRetries) $
+      \e -> case constraintViolation e of
+              Just (ForeignKeyViolation table constr) ->
+                Ex.throwM (ForeignKey (utf8 table) (utf8 constr))
+              Just (CheckViolation relation constr) ->
+                Ex.throwM (ForeignKey (utf8 relation) (utf8 constr))
+              Just (NotNullViolation column) ->
+                Ex.throwM (ForeignKey ("not null") (utf8 column))
+              Just (UniqueViolation column) ->
+                Ex.throwM (Conflict (utf8 column) [])
+              _ -> Ex.throwM $ DBError (Ex.SomeException e)
   where
-    go con st retryCounter = do
+    utf8 = Text.decodeUtf8With Text.lenientDecode
+    go con st retries = do
         Ex.catch (liftIO $ runReaderT m st) $ \e -> do
           runReaderT transactionUndo con
-          retriesLeft <- readIORef retryCounter
-          writeIORef retryCounter $ retriesLeft - 1
           case Postgres.sqlState e `elem` (conf L.^. retryableErrors)
-               && retriesLeft > 0
+               && retries > 0
             of
             True -> do
               delay <- randomRIO ( conf L.^. retryMinDelay
                                  , conf L.^. retryMaxDelay)
               threadDelay delay
-              go con st retryCounter
+              go con st (retries -1)
             False -> Ex.throwM e
 
 -- | Run the transaction in serializable mode
@@ -366,8 +377,8 @@ data PersistError = EntityNotFound !Text !Text -- Entity type and name
                   | Policy !Text
                   | ForeignKey !Text !Text -- Table and field
                   | Check !Text !Text
-                  | DBError
-                  deriving (Show, Eq, Ord, Data, Typeable, Generic)
+                  | DBError Ex.SomeException
+                  deriving (Show, Typeable, Generic)
 
 (..=) :: Text -> Text -> (Text, Aeson.Value)
 (..=) = (.=)
@@ -408,8 +419,9 @@ instance ToJSON PersistError where
                , "table" ..= table
                , "constraint" ..= constraint
                ]
-    toJSON DBError =
+    toJSON (DBError e) =
         object [ "error" ..= "database error"
+               , "value" ..= (Text.pack $ show e)
                ]
 
 

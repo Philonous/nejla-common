@@ -32,7 +32,6 @@ import           Control.Monad.Logger
 import           Control.Monad.Trans hiding (lift)
 import           Control.Monad.Trans.Control
 import           Data.Aeson
-import           Data.Char
 import           Data.Data
 import           Data.Default
 import           Data.Maybe
