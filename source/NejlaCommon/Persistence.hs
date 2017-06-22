@@ -97,7 +97,9 @@ module NejlaCommon.Persistence
   , ForeignPair(..)
   , ForeignKey(..)
   , foreignKey
+  , foreignKeyL
   , foreignKeyR
+  , foreignKeyLR
   , foreignKeyRMaybe
   , onForeignKey
   -- * Human-readable IDs
@@ -751,6 +753,22 @@ foreignKeyR  :: (ForeignKey a b, Esqueleto query expr backend) =>
 foreignKeyR x y =
     case foreignPair of
      (ForeignPair xk yk) -> just (x ^. xk) ==. y ?. yk
+
+-- | Similar to foreignKey, except that the foreign key can be nullable
+-- . However, it will only match if the key is actually set
+foreignKeyL  :: (ForeignKey a b, Esqueleto query expr backend) =>
+               expr (Maybe (Entity a)) -> expr (Entity b) -> expr (Value Bool)
+foreignKeyL x y =
+    case foreignPair of
+     (ForeignPair xk yk) -> (x ?. xk) ==. just (y ^. yk)
+
+-- | Similar to foreignKey, except that the foreign key can be nullable
+-- . However, it will only match if the key is actually set
+foreignKeyLR  :: (ForeignKey a b, Esqueleto query expr backend) =>
+               expr (Maybe (Entity a)) -> expr (Maybe (Entity b)) -> expr (Value Bool)
+foreignKeyLR x y =
+    case foreignPair of
+     (ForeignPair xk yk) -> (x ?. xk) ==. (y ?. yk)
 
 -- | Compare an entity field to a Haskell 'Maybe' value. NOTE: Simply using
 -- @==.@ does __not__ work! @NULL ==. Nothing@ will evaluate to @NULL@!
