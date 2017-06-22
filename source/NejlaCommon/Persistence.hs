@@ -68,10 +68,14 @@ module NejlaCommon.Persistence
   , mbEq
   , offsetLimit
   -- * SQL helpers
+  , SV
+  , SVM
   , jsonField
   , jsonFieldText
   , jsonFieldUUID
   , array
+  , emptyArray
+  , arrayAgg'
   , sqlFormatTime
   , deferrConstraints
   , undeferrConstraints
@@ -129,6 +133,7 @@ import           Data.Time
 import           Data.UUID                         (UUID)
 import           Database.Esqueleto                as E
 import           Database.Esqueleto.Internal.Sql
+import qualified Database.Esqueleto.PostgreSQL     as Postgres
 import qualified Database.PostgreSQL.Simple        as Postgres
 import           Database.PostgreSQL.Simple.Errors
 import           GHC.Generics
@@ -511,6 +516,20 @@ offsetLimit os l = do
     Foldable.forM_ os $ offset . fromIntegral
     Foldable.forM_ l $ limit . fromIntegral
     return ()
+
+
+
+type SV a  = SqlExpr (Entity a)
+type SVM a = SqlExpr (Maybe (Entity a))
+
+emptyArray :: SqlExpr (Value [a])
+emptyArray = unsafeSqlValue "'{}'"
+
+arrayRemoveNull :: SqlExpr (Value [Maybe a]) -> SqlExpr (Value [a])
+arrayRemoveNull x = unsafeSqlFunction "array_remove" (x, unsafeSqlValue "NULL")
+
+arrayAgg' :: PersistField [a] => SqlExpr (Value (Maybe a)) -> SqlExpr (Value [a])
+arrayAgg' =  arrayRemoveNull . Postgres.arrayAgg
 
 --------------------------------------------------------------------------------
 -- App helpers (Postgres specific) ---------------------------------------------
