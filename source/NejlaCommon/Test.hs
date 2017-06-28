@@ -58,20 +58,29 @@ shouldParseAs_  bs prx = do
 body :: Lens' SResponse BSL.ByteString
 body = lens simpleBody (\x y -> x{simpleBody = y} )
 
-checkStatusCode ::(MonadIO f) => Int -> Int -> SResponse -> f ()
+checkStatusCode ::(MonadIO m) => Int -> Int -> SResponse -> m ()
 checkStatusCode from' to' res = do
   let scode = (statusCode . simpleStatus $ res)
       smessage = (statusMessage . simpleStatus $ res)
-  unless (from' <= scode && scode < to')
-    . failure $ "Expected status code between 200 and 299 but got "
+  unless (from' <= scode && scode <= to')
+    . failure $ concat [  "Expected status code between "
+                       , show from' , " and ", show to'
+                       , " but got "
+                       ]
     <> show scode <> " (" <> show smessage <> ")"
     <> "\nBody: " <> show (simpleBody res)
+
+shouldBeSuccess :: (MonadIO m) => SResponse -> m ()
+shouldBeSuccess = checkStatusCode 200 299
+
+shouldSucceed :: MonadIO m => m SResponse -> m ()
+shouldSucceed m = checkStatusCode 200 299 =<< m
 
 infix 1 `shouldReturnA`
 shouldReturnA :: (Aeson.FromJSON a, MonadIO m) => m SResponse -> Proxy a -> m a
 shouldReturnA f prx = do
   res <- f
-  checkStatusCode 200 300 res
+  shouldBeSuccess res
   res ^. body `shouldParseAs` prx
 
 infix 1 `shouldReturnA_`
