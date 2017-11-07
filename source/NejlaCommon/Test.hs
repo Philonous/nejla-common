@@ -28,18 +28,20 @@ infix 1 `shouldBe`
 shouldBe :: (Eq a, Show a, MonadIO m) => a -> a -> m ()
 shouldBe x y = liftIO $ HSpec.shouldBe x y
 
--- | Lik Test.Hspec.Wai.post, but sets Content-Type to json
+-- | Like Test.Hspec.Wai.post, but sets Content-Type to json
 postJ :: BS.ByteString -> BSL.ByteString -> WaiSession SResponse
 postJ path bd =
   Wai.request "POST" path [("Content-Type", "application/json")] bd
 
--- | Lik Test.Hspec.Wai.put, but sets Content-Type to json
+-- | Like Test.Hspec.Wai.put, but sets Content-Type to json
 putJ :: BS.ByteString -> BSL.ByteString -> WaiSession SResponse
 putJ path bd =
   Wai.request "PUT" path [("Content-Type", "application/json")] bd
 
 infix 1 `shouldParseAs`
--- | Check that the
+-- | Check that the result parses as the specified type.
+-- -XTypeApplications make this nicer to write:
+-- result `shouldParseAs` (Proxy @MyData)
 shouldParseAs :: (MonadIO m, Aeson.FromJSON a) => BSL.ByteString -> Proxy a -> m a
 shouldParseAs bs (prx :: Proxy t) = do
   case Aeson.eitherDecode bs `withType` prx of
@@ -76,6 +78,8 @@ shouldBeSuccess = checkStatusCode 200 299
 shouldSucceed :: MonadIO m => m SResponse -> m ()
 shouldSucceed m = checkStatusCode 200 299 =<< m
 
+-- | Check that the request returns a sucessful respons that parses as the
+-- indicated type. Returns that parsed response. See also 'shouldParseAs'
 infix 1 `shouldReturnA`
 shouldReturnA :: (Aeson.FromJSON a, MonadIO m) => m SResponse -> Proxy a -> m a
 shouldReturnA f prx = do
@@ -83,6 +87,8 @@ shouldReturnA f prx = do
   shouldBeSuccess res
   res ^. body `shouldParseAs` prx
 
+-- | Check that the request returns a sucessful respons that parses as the
+-- indicated type, but ignores the response. See also 'shouldParseAs'
 infix 1 `shouldReturnA_`
 shouldReturnA_ :: (Aeson.FromJSON a, MonadIO m) => m SResponse -> Proxy a -> m ()
 shouldReturnA_ f prx = do
