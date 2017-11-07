@@ -78,12 +78,6 @@ instance PersistField UUID.UUID where
 instance PersistFieldSql UUID.UUID where
     sqlType _ = SqlOther "uuid"
 
-instance ToJSON UUID.UUID where
-    toJSON = toJSON . UUID.toString
-
-instance FromJSON UUID.UUID where
-    parseJSON = maybe mzero return . UUID.fromString <=< parseJSON
-
 instance Schema.JSONSchema UUID.UUID where
     schema uuid = Schema.schema $ fmap (TS.pack . show) uuid
 
