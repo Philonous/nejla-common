@@ -64,16 +64,16 @@ import           NejlaCommon.Wai
 
 instance PersistField UUID.UUID where
     toPersistValue = toPersistValue . UUID.toString
-    fromPersistValue = \x -> case x of
+    fromPersistValue x = case x of
         PersistDbSpecific bs ->
             case UUID.fromASCIIBytes bs of
-             Nothing -> Left $ "Invalid UUID: " <> (TS.pack $ show bs)
+             Nothing -> Left $ "Invalid UUID: " <> TS.pack (show bs)
              Just u -> Right u
         PersistText txt ->
             case UUID.fromString $ TS.unpack txt of
-             Nothing -> Left $ "Invalid UUID: " <> (TS.pack $ show txt)
+             Nothing -> Left $ "Invalid UUID: " <> TS.pack (show txt)
              Just u -> Right u
-        e -> Left $ "Can not convert to uuid: " <> (TS.pack $ show e)
+        e -> Left $ "Can not convert to uuid: " <> TS.pack (show e)
 
 instance PersistFieldSql UUID.UUID where
     sqlType _ = SqlOther "uuid"
@@ -124,11 +124,11 @@ withPool conf n f = do
               , "port"     ..= dbPort
               ]
     $logDebug $ "Using connection string: \""
-                <> (Text.decodeUtf8 connectionString) <> "\""
+                <> Text.decodeUtf8 connectionString <> "\""
 
-    withPostgresqlPool connectionString n $ f
+    withPostgresqlPool connectionString n f
   where
-    k ..= (Just v) = Just $ k <> "=" <> (Text.encodeUtf8 v)
+    k ..= (Just v) = Just $ k <> "=" <> Text.encodeUtf8 v
     _ ..= Nothing = Nothing
 
 -- | Create "trivial" instances for 'FromJSON', 'ToJSON', 'JSONSchema'. The
@@ -229,14 +229,14 @@ derivedType tname DD{ derivedPrefix = pre
                                                                   tp)
                   | (nm, _, tp) <- maybeFields' ]
              cName' = (mkName $ uPre ++ nameBase name)
-             dt = DataD [] (mkName $ uPre <> (nameBase cName)) []
+             dt = DataD [] (mkName $ uPre <> nameBase cName) []
                           Nothing [RecC cName' (cs ++ ms)] derive
              fromFunName = mkName $ concat [ "from"
-                                           , (upcase pre)
+                                           , upcase pre
                                            , nameBase name
                                            ]
              toFunName = mkName $ concat [ "to"
-                                           , (upcase pre)
+                                           , upcase pre
                                            , nameBase name
                                            ]
              fst3 (x, _, _) = x
@@ -245,22 +245,22 @@ derivedType tname DD{ derivedPrefix = pre
           EQ -> return ()
           GT -> reportWarning $ "Could not find all fields to remove for "
                                 <> show name <> " ("
-                                <> (show $ length removedFields)
+                                <> show (length removedFields)
                                 <> " filtered of "
-                                <> (show $ length rf)
+                                <> show (length rf)
                                 <> "; "
-                                <> (show (length rf - length removedFields))
+                                <> show (length rf - length removedFields)
                                 <> "remain)"
          case compare (length mf) (length maybeFields) of
           LT -> reportWarning "made too many fields optional"
           EQ -> return ()
           GT -> reportWarning $ "Could not find all fields to make optional for "
                                 <> show name <> " ("
-                                <> (show $ length maybeFields)
+                                <> show (length maybeFields)
                                 <> " optional of "
-                                <> (show $ length mf)
+                                <> show (length mf)
                                 <> "; "
-                                <> (show (length mf - length maybeFields))
+                                <> show (length mf - length maybeFields)
                                 <> "remain)"
 
          freeParams <- forM removedFields $ newName . nameBase
@@ -273,15 +273,15 @@ derivedType tname DD{ derivedPrefix = pre
                                  ++ zip maybeFields (VarE <$> maybeParams)
                                  ++ zip fullFields (VarE <$> constrParams))
              injFun = FunD fromFunName [Clause pats (NormalB bd) []]
-             projPat = RecP cName (zip (fullFields)
+             projPat = RecP cName (zip fullFields
                                        (VarP <$> constrParams)
-                                   ++ zip (maybeFields)
+                                   ++ zip maybeFields
                                        (VarP <$> maybeParams)
                                   )
              projBody = RecConE cName'
-                          $ (zip (fst3 <$> cs) (VarE <$> constrParams))
-                          ++ (zip (fst3 <$> ms) (AppE (ConE 'Just) . VarE
-                                                     <$> maybeParams))
+                          $ zip (fst3 <$> cs) (VarE <$> constrParams)
+                          ++ zip (fst3 <$> ms) (AppE (ConE 'Just) . VarE
+                                                     <$> maybeParams)
              projFun = FunD toFunName [Clause [projPat] (NormalB projBody ) []]
          return [dt, injFun, projFun]
 
@@ -314,7 +314,7 @@ derivedType tname DD{ derivedPrefix = pre
 
 -- Used by derivedType{,'}. Not exported.
 notIn :: Eq a => a -> [a] -> Bool
-notIn x xs = not (x `elem` xs)
+notIn x xs = x `notElem` xs
 
 -- | Extends a given type with an extra field and derives 'FromJSON', 'ToJSON'
 -- and 'JSONSchema' instances.
@@ -350,9 +350,9 @@ instance (KnownSymbol name, FromJSON fieldType, FromJSON baseType) =>
        Nothing -> parseJSON Null
        Just v -> parseJSON v
       b <- parseJSON (Object $ HMap.delete fName o)
-      return $ WithField{ withFieldField = f
-                        , withFieldBase = b
-                        }
+      return WithField{ withFieldField = f
+                      , withFieldBase = b
+                      }
 
 instance ( KnownSymbol name
          , Schema.JSONSchema fieldType
