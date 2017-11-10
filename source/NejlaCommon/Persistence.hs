@@ -173,8 +173,11 @@ genSingletons [''Privilege, ''TransactionLevel]
 promoteEqInstances [''Privilege, ''TransactionLevel]
 promoteOrdInstances  [''Privilege, ''TransactionLevel]
 
+-- | Application state
 data AppState st = AppState { appStateConnection :: !SqlBackend
+                            -- ^ The database connection to work with
                             , appStateUserState  :: !st
+                            -- ^ User state
                             } deriving ( Typeable, Generic)
 
 L.makeLensesWith L.camelCaseFields ''AppState
@@ -346,6 +349,7 @@ db' :: ReaderT SqlBackend IO b -> App st 'Privileged 'ReadCommitted b
 db' = unprivileged . db
 {-# INLINE db' #-}
 
+-- | Run a lower-loeveled action in a higher-leveled context
 withLevel :: ((newLevel :<= oldLevel) ~ 'True) =>
              App st p newLevel a
           -> App st p oldLevel a
@@ -387,6 +391,8 @@ data PersistError = EntityNotFound !Text !Text -- Entity type and name
                   | DBError Ex.SomeException
                   deriving (Show, Typeable, Generic)
 
+-- | Operator for setting text-valued JSON object fields (overloaded strings
+-- breaks type inference for string literals)
 (..=) :: Text -> Text -> (Text, Aeson.Value)
 (..=) = (.=)
 
@@ -428,10 +434,10 @@ instance ToJSON PersistError where
                ]
     toJSON (DBError e) =
         object [ "error" ..= "database error"
-               , "value" ..= (Text.pack $ show e)
+               , "value" ..= Text.pack (show e)
                ]
 
-
+-- | Response codes for defined errors
 responseCode :: PersistError -> Int
 responseCode Conflict{}                 = 409
 responseCode JSONDeserializationError{} = 400
@@ -717,7 +723,7 @@ data ForeignPair a b where
                  -> ForeignPair a b
 
 
--- | Describe a unique, caninical foreign key relationship between entities,
+-- | Describe a unique, canonical foreign key relationship between entities,
 -- . For example, given the entity definitions from 'ForeignPair', there is
 -- exactly one foreign key relationship between Employee and Team, so we can capture it in a type class:
 --
@@ -808,9 +814,13 @@ onForeignKey x y = on $ foreignKey x y
 -- ID generation ---------------------------------------------------------------
 --------------------------------------------------------------------------------
 
+-- | Digits for human-readable ID generation. 0 and 1 are not included to avoid
+-- confusion with I and O respectively
 hrIDDigits :: [Char]
 hrIDDigits = "2345679"
 
+-- | Letters for human-readable ID generation. Vovels are not included to avoid
+-- accidentally spelling profanities.
 hrIDChars :: [Char]
 hrIDChars = "CDFGHJKLMNPQRSTVWXYZ" ++ hrIDDigits
 

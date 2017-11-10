@@ -64,7 +64,7 @@ withoutPrefix pre' l = case List.stripPrefix pre' l of
 -- Aeson helpers ---------------------------------------------------------------
 --------------------------------------------------------------------------------
 
--- | Default options for creatin JSON instances using Aeson.
+-- | Default options for creating JSON instances using Aeson.
 aesonTHOptions :: [Char] -- ^ field prefix to strip
                -> Options
 aesonTHOptions pre' = defaultOptions{ fieldLabelModifier = mkName'

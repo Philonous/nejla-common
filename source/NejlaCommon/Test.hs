@@ -20,6 +20,7 @@ import qualified Test.Hspec                as HSpec
 import qualified Test.Hspec.Wai            as Wai
 import           Test.Hspec.Wai            hiding (post, put)
 
+-- | Lifted exceptions-based failure
 failure :: MonadIO m => String -> m a
 failure msg = liftIO . Ex.throwIO $ HUnitFailure Nothing (Reason msg)
 
@@ -52,18 +53,26 @@ shouldParseAs bs (prx :: Proxy t) = do
     withType x _ = x
 
 infix 1 `shouldParseAs_`
+-- | Check that a ByteString parses as a JSON value, but ignore the result. See
+-- 'shouldParseAs'
 shouldParseAs_ :: (MonadIO m, Aeson.FromJSON a) => BSL.ByteString -> Proxy a -> m ()
 shouldParseAs_  bs prx = do
   _ <- bs `shouldParseAs` prx
   return ()
 
+-- | Lens for retrieving the body of a hspec-servant response
 body :: Lens' SResponse BSL.ByteString
 body = lens simpleBody (\x y -> x{simpleBody = y} )
 
-checkStatusCode ::(MonadIO m) => Int -> Int -> SResponse -> m ()
+-- | Check that status code is in an interval
+checkStatusCode ::(MonadIO m) =>
+                   Int -- ^ Inclusive lower bound
+                -> Int -- ^ Inclusive upper bound
+                -> SResponse
+                -> m ()
 checkStatusCode from' to' res = do
-  let scode = (statusCode . simpleStatus $ res)
-      smessage = (statusMessage . simpleStatus $ res)
+  let scode = statusCode . simpleStatus $ res
+      smessage = statusMessage . simpleStatus $ res
   unless (from' <= scode && scode <= to')
     . failure $ concat [  "Expected status code between "
                        , show from' , " and ", show to'
@@ -72,9 +81,11 @@ checkStatusCode from' to' res = do
     <> show scode <> " (" <> show smessage <> ")"
     <> "\nBody: " <> show (simpleBody res)
 
+-- | Check that status code is between 200 and 299 (inclusive)
 shouldBeSuccess :: (MonadIO m) => SResponse -> m ()
 shouldBeSuccess = checkStatusCode 200 299
 
+-- | Check that action returns a status code between 200 and 299 (inclusive)
 shouldSucceed :: MonadIO m => m SResponse -> m ()
 shouldSucceed m = checkStatusCode 200 299 =<< m
 

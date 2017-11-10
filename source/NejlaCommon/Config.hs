@@ -126,8 +126,8 @@ getConfBool :: (MonadIO m, MonadLogger m) =>
             -> m Bool
 getConfBool = getConfGeneric parseBool
   where
-    parseBool str | (map Char.toLower $ str) == "true" = Just True
-                  | (map Char.toLower $ str) == "false" = Just False
+    parseBool str | map Char.toLower str == "true" = Just True
+                  | map Char.toLower str == "false" = Just False
                   | otherwise = Nothing
 
 -- | Get boolean config option
@@ -138,8 +138,8 @@ getConfBoolMaybe :: (MonadIO m, MonadLogger m) =>
                  -> m (Maybe  Bool)
 getConfBoolMaybe = getConfGenericMaybe parseBool
   where
-    parseBool str | (map Char.toLower $ str) == "true" = Just True
-                  | (map Char.toLower $ str) == "false" = Just False
+    parseBool str | map Char.toLower str == "true" = Just True
+                  | map Char.toLower str == "false" = Just False
                   | otherwise = Nothing
 
 

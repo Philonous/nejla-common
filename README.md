@@ -273,3 +273,47 @@ source files:
 ## Likely candidates for suppression
 * -fno-warn-orphans
 * -fno-warn-type-defaults
+
+# Testing
+
+The [NejlaCommon.Test](source/NejlaCommon/Test.hs) module brings some useful helper functions.
+
+## HUnit (and exception-based testing frameworks)
+
+* failure: A general purpose failing combinator
+* shouldBe: lifted to MonadIO
+
+* shouldParseAs, shouldParseAs_: Check that value can be parses as JSON
+
+## servant-wai
+
+* postJ, putJ: post and put with `Content-Type` set to "application/json"
+* shouldBeSuccess: Check that response has success status code
+* shouldSucceed: Check that action returns a successful response
+* shouldReturnA, shouldReturnA_: Check that action returns a response that can be parsed as JSON
+
+# Configuration
+
+[NejlaCommon.Config](source/NejlaCommon/Config.hs) includes useful helpers for
+getting configuration for an app. Each option can be set either in a
+configuration file (see
+[configurator](https://hackage.haskell.org/package/configurator)) or an
+environament variable (for ease of use with e.g. docker-compose).
+
+# Helpers
+
+[NejlaCommon.Helpers](source/NejlaCommon/Helpers.hs) brings helpers for aeson
+and lens TH generation functions.
+
+Data fields in Haskell are usually written in camelCase and prefixed to avoid
+name clashes, whereas json values are often written with underscores and no
+prefixing is necessary. So when writing {To|From}JSON instances the names need
+to be converted. The modules includes helper functions to easy that process and
+comes with a sensible default `aesonTHOptions`
+
+Lens on the other hand comes with functions that handle prefixes, however, it
+doesn't check for invalid names (e.g. "type" or "default") or offer an easy
+option for fixing them. That's where `camelCaseFieldsReplacing` helps: you can
+give it a HashMap of replacements which are applied to
+fields. `camelCaseFields'` comes with default replacements for "type" to "type'"
+and "default" to "default'".
