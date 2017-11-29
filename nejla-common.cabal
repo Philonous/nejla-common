@@ -6,7 +6,7 @@ homepage:           https://github.com/nejla/nejla-common
 license:            BSD3
 license-file:       LICENSE
 maintainer:         info@nejla.com
-copyright:          Nejla AB, 2016
+copyright:          Nejla AB, 2014-2017
 category:           Development
 build-type:         Simple
 extra-source-files: README.md
