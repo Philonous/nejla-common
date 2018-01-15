@@ -166,17 +166,19 @@ mkJsonType name dd = do
 data DerivedData = DD { derivedPrefix :: String
                       , removeFields :: [String]
                       , optionalFields :: [String]
-                      , derive :: Cxt
+                      , derive :: [DerivClause]
                       }
 
 instance Default DerivedData where
-    def = DD { derivedPrefix = ""
-             , removeFields = []
-             , optionalFields = []
-             , derive =
-                 ConT <$>
-                 [''Show, ''Eq, ''Data, ''Typeable, ''Generic ]
-             }
+  def =
+    DD
+    { derivedPrefix = ""
+    , removeFields = []
+    , optionalFields = []
+    , derive =
+        pure . DerivClause Nothing $
+        ConT <$> [''Show, ''Eq, ''Data, ''Typeable, ''Generic]
+    }
 
 -- | Create a derived type. Takes a type name and adds the 'derivedPrefix' value
 -- to the type name, the constructor name and all the fields, removes the fields
