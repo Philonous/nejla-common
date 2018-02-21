@@ -1,0 +1,89 @@
+name: nejla-common
+version: '0.0.1.0'
+synopsis: Common functionality for Nejla Reference Architecture applications
+description: Common functionality for Nejla Reference Architecture applications.
+category: Development
+maintainer: info@nejla.com
+copyright:
+  - Nejla AB
+  - '2014-2017'
+license: BSD3
+homepage: https://github.com/nejla/nejla-common
+extra-source-files:
+  - README.md
+
+dependencies:
+  - aeson
+  - bytestring
+  - configurator
+  - data-default
+  - esqueleto
+  - fast-logger
+  - HUnit
+  - lens
+  - monad-control
+  - monad-logger
+  - persistent
+  - persistent-postgresql
+  - persistent-template
+  - postgresql-simple
+  - text
+  - unordered-containers
+
+library:
+  source-dirs: source
+  ghc-options: -Wall
+  exposed-modules:
+    - NejlaCommon
+    - NejlaCommon.Config
+    - NejlaCommon.Helpers
+    - NejlaCommon.Test
+  dependencies:
+    - base >=4.7 && <5.0
+    - binary
+    - case-insensitive >=1.2
+    - exceptions >=0.8
+    - generic-aeson
+    - hspec
+    - hspec-wai
+    - hspec-wai-json
+    - http-api-data >=0.3.1
+    - http-types >=0.9
+    - json-schema
+    - mtl >=2.2
+    - path-pieces
+    - random
+    - random-shuffle
+    - resourcet
+    - rest-types
+    - singletons >=1.1
+    - template-haskell >=2.11
+    - time >=1.5
+    - transformers
+    - transformers-base
+    - uuid
+    - wai
+    - wai-extra
+
+tests:
+  tests:
+    main: Test.hs
+    source-dirs: tests
+    ghc-options: -threaded
+    dependencies:
+      - QuickCheck
+      - async
+      - base
+      - formatting
+      - hspec-expectations
+      - mtl
+      - nejla-common
+      - shelly
+      - singletons
+      - tasty
+      - tasty-hunit
+      - tasty-quickcheck
+      - tasty-th
+      - temporary
+      - time
+      - template-haskell

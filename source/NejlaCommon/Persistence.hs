@@ -1,5 +1,7 @@
 -- Copyright © 2014-2015 Lambdatrade AB. All rights reserved.
 
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DataKinds #-}
@@ -722,7 +724,6 @@ data ForeignPair a b where
                  -> EntityField b f
                  -> ForeignPair a b
 
-
 -- | Describe a unique, canonical foreign key relationship between entities,
 -- . For example, given the entity definitions from 'ForeignPair', there is
 -- exactly one foreign key relationship between Employee and Team, so we can capture it in a type class:
@@ -735,7 +736,17 @@ data ForeignPair a b where
 -- Note that the entity with the foreign key is the _first_ parameter of the
 -- type class, the target entity the second
 class ForeignKey a b where
-    foreignPair :: ForeignPair a b
+  foreignPairs :: [ForeignPair a b]
+
+withForeignPairs ::
+     (ForeignKey a b, Esqueleto query expr backend)
+  => (forall f. (PersistField f, PersistEntity a, PersistEntity b)  =>
+                EntityField a f
+             -> EntityField b f
+             -> expr (Value Bool))
+  -> expr (Value Bool)
+withForeignPairs f = andL . flip map (foreignPairs) $ \case
+  (ForeignPair xk yk) -> f xk yk
 
 -- | A foreign key constraint between two entities.
 --
@@ -748,33 +759,25 @@ class ForeignKey a b where
 -- @
 foreignKey :: (ForeignKey a b, Esqueleto query expr backend) =>
               expr (Entity a) -> expr (Entity b) -> expr (Value Bool)
-foreignKey x y =
-    case foreignPair of
-     (ForeignPair xk yk) -> x ^. xk ==. y ^. yk
+foreignKey x y = withForeignPairs $ \xk yk -> x ^. xk ==. y ^. yk
 
 -- | Similar to foreignKey, except that the foreign key can be nullable
 -- . However, it will only match if the key is actually set
 foreignKeyR  :: (ForeignKey a b, Esqueleto query expr backend) =>
                expr (Entity a) -> expr (Maybe (Entity b)) -> expr (Value Bool)
-foreignKeyR x y =
-    case foreignPair of
-     (ForeignPair xk yk) -> just (x ^. xk) ==. y ?. yk
+foreignKeyR x y = withForeignPairs $ \xk yk ->just (x ^. xk) ==. y ?. yk
 
 -- | Similar to foreignKey, except that the foreign key can be nullable
 -- . However, it will only match if the key is actually set
 foreignKeyL  :: (ForeignKey a b, Esqueleto query expr backend) =>
                expr (Maybe (Entity a)) -> expr (Entity b) -> expr (Value Bool)
-foreignKeyL x y =
-    case foreignPair of
-     (ForeignPair xk yk) -> (x ?. xk) ==. just (y ^. yk)
+foreignKeyL x y = withForeignPairs $ \xk yk ->(x ?. xk) ==. just (y ^. yk)
 
 -- | Similar to foreignKey, except that the foreign key can be nullable
 -- . However, it will only match if the key is actually set
 foreignKeyLR  :: (ForeignKey a b, Esqueleto query expr backend) =>
                expr (Maybe (Entity a)) -> expr (Maybe (Entity b)) -> expr (Value Bool)
-foreignKeyLR x y =
-    case foreignPair of
-     (ForeignPair xk yk) -> (x ?. xk) ==. (y ?. yk)
+foreignKeyLR x y = withForeignPairs $ \xk yk ->(x ?. xk) ==. (y ?. yk)
 
 -- | Compare an entity field to a Haskell 'Maybe' value. NOTE: Simply using
 -- @==.@ does __not__ work! @NULL ==. Nothing@ will evaluate to @NULL@!
@@ -791,8 +794,7 @@ foreignKeyRMaybe :: (Esqueleto query expr backend, ForeignKey a b) =>
                  -> expr (Maybe (Entity b))
                  -> expr (Value Bool)
 foreignKeyRMaybe x y =
-    case foreignPair of
-     (ForeignPair xk yk) ->
+  withForeignPairs $ \xk yk ->
          orL [ isNothing (y ?. yk)
              , just (x ^. xk) ==. y ?. yk
              ]
