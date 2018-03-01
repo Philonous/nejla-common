@@ -104,7 +104,9 @@ module NejlaCommon.Persistence
   , foreignKeyL
   , foreignKeyR
   , foreignKeyLR
+  , foreignKeyLMaybe
   , foreignKeyRMaybe
+  , foreignKeyLRMaybe
   , onForeignKey
   -- ** Automatic generation of Foreign Relationships
   , mkForeignInstances
@@ -537,8 +539,6 @@ offsetLimit os l = do
     Foldable.forM_ l $ limit . fromIntegral
     return ()
 
-
-
 type SV a  = SqlExpr (Entity a)
 type SVM a = SqlExpr (Maybe (Entity a))
 
@@ -555,12 +555,12 @@ arrayAgg' =  arrayRemoveNull . Postgres.arrayAgg
 -- App helpers (Postgres specific) ---------------------------------------------
 --------------------------------------------------------------------------------
 
+infixl 5 `jsonField`, `jsonFieldText`
+
 -- | Class of Haskell types that are represented as json in postgres
 class SqlJSON a where
 
 instance SqlJSON Aeson.Value
-
-infixl 5 `jsonField`, `jsonFieldText`
 
 -- | postgresql (->) (object indexing) function
 jsonField :: (SqlJSON a, SqlJSON b) =>
@@ -569,14 +569,15 @@ jsonField :: (SqlJSON a, SqlJSON b) =>
           -> SqlExpr (Value b)
 jsonField = unsafeSqlBinOp "->"
 
--- | postgresql (->) (object indexing) function
+-- | postgresql (->>) (object indexing) function
 jsonFieldText :: (SqlJSON a) =>
                  SqlExpr (Value a)
               -> SqlExpr (Value Text)
               -> SqlExpr (Value (Maybe Text))
 jsonFieldText = unsafeSqlBinOp "->>"
 
--- | postgresql (->) (object indexing) function
+-- | postgresql (->>) object indexing function with the argument interpreted as
+-- a UUID
 jsonFieldUUID :: SqlJSON a =>
                  SqlExpr (Value a)
               -> SqlExpr (Value Text)
@@ -704,7 +705,7 @@ fromMaybeNotFound entType entName item' =
 -- Foreign Key Relationships ---------------------------------------------------
 --------------------------------------------------------------------------------
 
--- | Describe a Pair of keys that form a foreign key relationship.
+-- | Describe a Pair of keys that are part of a foreign key relationship.
 --
 -- The first element is the entity field that holds the foreign key. The second
 -- element is the entity field that holds the references primary key. Type of
@@ -735,13 +736,14 @@ data ForeignPair :: * -> * -> * where
                  -> EntityField b f
                  -> ForeignPair a b
 
--- | Describe a unique, canonical foreign key relationship between entities,
--- . For example, given the entity definitions from 'ForeignPair', there is
--- exactly one foreign key relationship between Employee and Team, so we can capture it in a type class:
+-- | Describe a unique, canonical foreign key relationship between entities. For
+-- example, given the entity definitions from 'ForeignPair', there is exactly
+-- one foreign key relationship between Employee and Team, so we can capture it
+-- in a type class:
 --
 -- @
 -- instance ForeignKey Team Employee where
---     foreignPair = ForeignPair TeamEmployee EmployeeNum
+--     foreignPairs = [ForeignPair TeamEmployee EmployeeNum]
 -- @
 --
 -- Note that the entity with the foreign key is the _first_ parameter of the
@@ -773,20 +775,17 @@ foreignKey :: (ForeignKey a b, Esqueleto query expr backend) =>
               expr (Entity a) -> expr (Entity b) -> expr (Value Bool)
 foreignKey x y = withForeignPairs $ \xk yk -> x ^. xk ==. y ^. yk
 
--- | Similar to foreignKey, except that the foreign key can be nullable
--- . However, it will only match if the key is actually set
+-- | 'foreignKey' for 'RightOuterJoin'
 foreignKeyR  :: (ForeignKey a b, Esqueleto query expr backend) =>
                expr (Entity a) -> expr (Maybe (Entity b)) -> expr (Value Bool)
 foreignKeyR x y = withForeignPairs $ \xk yk ->just (x ^. xk) ==. y ?. yk
 
--- | Similar to foreignKey, except that the foreign key can be nullable
--- . However, it will only match if the key is actually set
+-- | 'foreignKey' for 'LeftOuterJoin'
 foreignKeyL  :: (ForeignKey a b, Esqueleto query expr backend) =>
                expr (Maybe (Entity a)) -> expr (Entity b) -> expr (Value Bool)
 foreignKeyL x y = withForeignPairs $ \xk yk ->(x ?. xk) ==. just (y ^. yk)
 
--- | Similar to foreignKey, except that the foreign key can be nullable
--- . However, it will only match if the key is actually set
+-- | 'foreignKey' for 'FullOuterJoin'
 foreignKeyLR  :: (ForeignKey a b, Esqueleto query expr backend) =>
                expr (Maybe (Entity a)) -> expr (Maybe (Entity b)) -> expr (Value Bool)
 foreignKeyLR x y = withForeignPairs $ \xk yk ->(x ?. xk) ==. (y ?. yk)
@@ -800,7 +799,18 @@ mbEq v1 Nothing  = isNothing v1
 mbEq v1 (Just v2)  = v1 ==. just (val v2)
 
 
--- | Like foreignKeyR, but also matches if the foreign key field is NULL
+-- | Like foreignKeyL, but also matches if the foreign reference is NULL
+foreignKeyLMaybe :: (Esqueleto query expr backend, ForeignKey a b) =>
+                    expr (Maybe( Entity a))
+                 -> expr (Entity b)
+                 -> expr (Value Bool)
+foreignKeyLMaybe x y =
+  withForeignPairs $ \xk yk ->
+         orL [ isNothing (x ?. xk)
+             , x ?. xk ==. just (y ^. yk)
+             ]
+
+-- | Like foreignKeyR, but also matches if the target key field is NULL
 foreignKeyRMaybe :: (Esqueleto query expr backend, ForeignKey a b) =>
                     expr (Entity a)
                  -> expr (Maybe (Entity b))
@@ -810,6 +820,20 @@ foreignKeyRMaybe x y =
          orL [ isNothing (y ?. yk)
              , just (x ^. xk) ==. y ?. yk
              ]
+
+-- | Like foreignKeyLR, but also matches if foreign reference or target key are
+-- null
+foreignKeyLRMaybe :: (Esqueleto query expr backend, ForeignKey a b) =>
+                    expr (Maybe( Entity a))
+                 -> expr (Maybe (Entity b))
+                 -> expr (Value Bool)
+foreignKeyLRMaybe x y =
+  withForeignPairs $ \xk yk ->
+         orL [ isNothing (x ?. xk)
+             , isNothing (y ?. yk)
+             , x ?. xk ==. y ?. yk
+             ]
+
 -- | ON for a foreign key pair
 --
 -- @onForeignKey a b === on (foreignKey a b)@
@@ -830,8 +854,8 @@ onForeignKey x y = on $ foreignKey x y
 
 -- | Calculate the foreign relationships from entity definitions.  The resulting
 -- list is for each entity the entity it refers to and a list of field pairs
-foreignEnts :: [EntityDef] -> [((String, String), [(String, String)])]
-foreignEnts ents = do
+foreignEnts :: [EntityDef] -> [((String, String), [[(String, String)]])]
+foreignEnts ents = merge $ do
   ent <- ents
   let entName = unHaskellName $ entityHaskell ent
   -- References to the implicit EntityId fields
@@ -855,7 +879,7 @@ foreignEnts ents = do
       -- Head is OK here because group never returns emtpty lists.
       map (\xs -> (fst $ head xs, snd <$> xs)) .
       List.groupBy ((==) `Function.on` fst)
-      . List.sortBy (Ord.comparing fst) $ foreignEnts ents
+      . List.sortBy (Ord.comparing fst)
 
     fromForeignRefs (ForeignRef x _ ) = pure $ unHaskellName x
     fromForeignRefs _ = mempty
@@ -909,7 +933,7 @@ hrIDDigits = "2345679"
 -- | Letters for human-readable ID generation. Vovels are not included to avoid
 -- accidentally spelling profanities.
 hrIDChars :: [Char]
-hrIDChars = "CDFGHJKLMNPQRSTVWXYZ" ++ hrIDDigits
+hrIDChars = "CDFGHJKLMNPQRSTVWXYZ" <> hrIDDigits
 
 -- | Generate a random human-readable ID.
 mkRandomHrID :: Int -> IO Text
