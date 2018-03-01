@@ -130,7 +130,6 @@ import           Data.Data
 import           Data.Default
 import qualified Data.Foldable                     as Foldable
 import qualified Data.Function                     as Function
-import           Data.IORef
 import qualified Data.List                         as List
 import           Data.Maybe                        (catMaybes, maybeToList)
 import           Data.Monoid
@@ -146,7 +145,6 @@ import           Data.UUID                         (UUID)
 import           Database.Esqueleto                as E
 import           Database.Esqueleto.Internal.Sql
 import qualified Database.Esqueleto.PostgreSQL     as Postgres
-import           Database.Persist.TH
 import qualified Database.PostgreSQL.Simple        as Postgres
 import           Database.PostgreSQL.Simple.Errors
 import           GHC.Generics
@@ -871,8 +869,8 @@ foreignEnts ents = merge $ do
         frgn <- entityForeigns ent
         let remote = unHaskellName $ foreignRefTableHaskell frgn
         return . ((Text.unpack entName,  Text.unpack remote), ) $ do
-          ((HaskellName from, _), (HaskellName to, _)) <- foreignFields frgn
-          return (toField entName from, toField remote to)
+          ((HaskellName f, _), (HaskellName t, _)) <- foreignFields frgn
+          return (toField entName f, toField remote t)
   implicits <> explicits
   where
     merge =
@@ -890,30 +888,30 @@ foreignEnts ents = merge $ do
 mkForeignInstances :: [EntityDef] -> TH.Q [TH.Dec]
 mkForeignInstances ents = do
   let defs = foreignEnts ents
-  concatForM defs $ \((from, to), pairss) ->
+  concatForM defs $ \((f, t), pairss) ->
     case pairss of
       [] -> error "mkForeignInstances: Empty group"
-      [pairs] ->
+      [pairs'] ->
         let foreignPairs' =
               [[|ForeignPair $(TH.conE $ TH.mkName x)
                              $(TH.conE $ TH.mkName y)
                 |]
-               | (x,y) <- pairs
+               | (x,y) <- pairs'
               ]
         in [d|
-          instance ForeignKey $(TH.conT $ TH.mkName from)
-                              $(TH.conT $ TH.mkName to) where
+          instance ForeignKey $(TH.conT $ TH.mkName f)
+                              $(TH.conT $ TH.mkName t) where
             foreignPairs = $(TH.listE foreignPairs')
 
            |]
       _ -> do
         TH.reportWarning
               $ concat [ "More than one possible Foreign instance for "
-                       , from, " => ", to , ": \n"
+                       , f, " => ", t , ": \n"
                        , List.intercalate "\n"
-                           . map ("      " <>) . for pairss $ \pairs ->
-                           List.intercalate ", " $ for pairs $ \(f, t) ->
-                             concat [f , " -> ", t]
+                           . map ("      " <>) . for pairss $ \pairs' ->
+                           List.intercalate ", " $ for pairs' $ \(f', t') ->
+                             concat [f' , " -> ", t']
                        , "\n  Please create instances by hand"
                        ]
         return []
