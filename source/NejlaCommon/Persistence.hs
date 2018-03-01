@@ -1,5 +1,7 @@
 -- Copyright © 2014-2015 Lambdatrade AB. All rights reserved.
 
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -104,6 +106,8 @@ module NejlaCommon.Persistence
   , foreignKeyLR
   , foreignKeyRMaybe
   , onForeignKey
+  -- ** Automatic generation of Foreign Relationships
+  , mkForeignInstances
   -- * Human-readable IDs
   , mkRandomHrID
   , mkUniqueRandomHrID
@@ -123,10 +127,12 @@ import           Data.ByteString                   (ByteString)
 import           Data.Data
 import           Data.Default
 import qualified Data.Foldable                     as Foldable
+import qualified Data.Function                     as Function
 import           Data.IORef
 import qualified Data.List                         as List
 import           Data.Maybe                        (catMaybes, maybeToList)
 import           Data.Monoid
+import qualified Data.Ord                          as Ord
 import           Data.Singletons
 import           Data.Singletons.TH
 import           Data.Text                         (Text)
@@ -138,11 +144,15 @@ import           Data.UUID                         (UUID)
 import           Database.Esqueleto                as E
 import           Database.Esqueleto.Internal.Sql
 import qualified Database.Esqueleto.PostgreSQL     as Postgres
+import           Database.Persist.TH
 import qualified Database.PostgreSQL.Simple        as Postgres
 import           Database.PostgreSQL.Simple.Errors
 import           GHC.Generics
+import qualified Language.Haskell.TH               as TH
 import           System.Random
 import           System.Random.Shuffle
+
+import           NejlaCommon.Helpers
 
 --------------------------------------------------------------------------------
 -- SQL Monad -------------------------------------------------------------------
@@ -718,8 +728,9 @@ fromMaybeNotFound entType entName item' =
 --
 -- @ForeignPair TeamEmployee EmployeeNum@
 
-data ForeignPair a b where
-    ForeignPair :: (PersistEntity a, PersistEntity b, PersistField f) =>
+data ForeignPair :: * -> * -> * where
+    ForeignPair :: forall a b f.
+                   (PersistEntity a, PersistEntity b, PersistField f) =>
                     EntityField a f
                  -> EntityField b f
                  -> ForeignPair a b
@@ -738,6 +749,7 @@ data ForeignPair a b where
 class ForeignKey a b where
   foreignPairs :: [ForeignPair a b]
 
+-- | Apply f to each pair of foreign fields (most likely some variant of equality)
 withForeignPairs ::
      (ForeignKey a b, Esqueleto query expr backend)
   => (forall f. (PersistField f, PersistEntity a, PersistEntity b)  =>
@@ -811,6 +823,79 @@ foreignKeyRMaybe x y =
 onForeignKey :: (Esqueleto query expr backend, ForeignKey a b) =>
                 expr (Entity a) -> expr (Entity b) -> query ()
 onForeignKey x y = on $ foreignKey x y
+
+--------------------------------------------------------------------------------
+-- Automatic Generation of Foreign Key Pairs -----------------------------------
+--------------------------------------------------------------------------------
+
+-- | Calculate the foreign relationships from entity definitions.  The resulting
+-- list is for each entity the entity it refers to and a list of field pairs
+foreignEnts :: [EntityDef] -> [((String, String), [(String, String)])]
+foreignEnts ents = do
+  ent <- ents
+  let entName = unHaskellName $ entityHaskell ent
+  -- References to the implicit EntityId fields
+  let implicits = do
+        field <- entityFields ent
+        let nm = unHaskellName $ fieldHaskell field
+        ref <- fromForeignRefs $ fieldReference field
+        return ( (Text.unpack entName, Text.unpack ref)
+               , [(toField entName nm
+                  , Text.unpack $  ref <> "Id")])
+  -- References that use explicit »Primary« and »Foreign» declarations
+      explicits = do
+        frgn <- entityForeigns ent
+        let remote = unHaskellName $ foreignRefTableHaskell frgn
+        return . ((Text.unpack entName,  Text.unpack remote), ) $ do
+          ((HaskellName from, _), (HaskellName to, _)) <- foreignFields frgn
+          return (toField entName from, toField remote to)
+  implicits <> explicits
+  where
+    merge =
+      -- Head is OK here because group never returns emtpty lists.
+      map (\xs -> (fst $ head xs, snd <$> xs)) .
+      List.groupBy ((==) `Function.on` fst)
+      . List.sortBy (Ord.comparing fst) $ foreignEnts ents
+
+    fromForeignRefs (ForeignRef x _ ) = pure $ unHaskellName x
+    fromForeignRefs _ = mempty
+    upcase' = upcase . Text.unpack
+    toField ent name = Text.unpack ent <> (upcase' name)
+
+-- | Automatically create ForeignKey instances
+mkForeignInstances :: [EntityDef] -> TH.Q [TH.Dec]
+mkForeignInstances ents = do
+  let defs = foreignEnts ents
+  concatForM defs $ \((from, to), pairss) ->
+    case pairss of
+      [] -> error "mkForeignInstances: Empty group"
+      [pairs] ->
+        let foreignPairs' =
+              [[|ForeignPair $(TH.conE $ TH.mkName x)
+                             $(TH.conE $ TH.mkName y)
+                |]
+               | (x,y) <- pairs
+              ]
+        in [d|
+          instance ForeignKey $(TH.conT $ TH.mkName from)
+                              $(TH.conT $ TH.mkName to) where
+            foreignPairs = $(TH.listE foreignPairs')
+
+           |]
+      _ -> do
+        TH.reportWarning
+              $ concat [ "More than one possible Foreign instance for "
+                       , from, " => ", to , ": \n"
+                       , List.intercalate "\n"
+                           . map ("      " <>) . for pairss $ \pairs ->
+                           List.intercalate ", " $ for pairs $ \(f, t) ->
+                             concat [f , " -> ", t]
+                       , "\n  Please create instances by hand"
+                       ]
+        return []
+  where
+    for = flip map
+    concatForM xs f = concat <$> forM xs f
 
 --------------------------------------------------------------------------------
 -- ID generation ---------------------------------------------------------------
