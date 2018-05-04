@@ -120,6 +120,7 @@ import qualified Control.Lens                      as L
 import           Control.Lens.TH
 import           Control.Monad.Base
 import qualified Control.Monad.Catch               as Ex
+import           Control.Monad.IO.Unlift           (MonadUnliftIO)
 import           Control.Monad.Logger
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Control
@@ -218,7 +219,9 @@ viewState f = App . L.view $ userState . f
 newtype App (st :: *) (r :: Privilege) (l :: TransactionLevel)
             a = App {unApp :: ReaderT (AppState st) IO a}
                    deriving (Functor, Applicative, Monad, MonadIO
-                            , Ex.MonadThrow, Ex.MonadCatch, MonadBase IO)
+                            , Ex.MonadThrow, Ex.MonadCatch, Ex.MonadMask
+                            , MonadBase IO, MonadUnliftIO
+                            )
 
 instance MonadBaseControl IO (App st r l) where
   type StM (App st r l) a = a
