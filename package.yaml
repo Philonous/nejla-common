@@ -9,8 +9,6 @@ copyright:
   - '2014-2017'
 license: BSD3
 homepage: https://github.com/nejla/nejla-common
-extra-source-files:
-  - README.md
 
 dependencies:
   - aeson
@@ -61,6 +59,7 @@ library:
     - time >=1.5
     - transformers
     - transformers-base
+    - unliftio-core
     - uuid
     - wai
     - wai-extra

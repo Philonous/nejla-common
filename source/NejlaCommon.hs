@@ -50,7 +50,6 @@ import           Web.PathPieces
 
 import qualified Data.ByteString as BS
 import qualified Data.HashMap.Strict as HMap
-import qualified Data.JSON.Schema as Schema
 import qualified Data.List as L
 import qualified Data.Text as TS
 import qualified Rest.Types.Info as Rest
@@ -77,9 +76,6 @@ instance PersistField UUID.UUID where
 
 instance PersistFieldSql UUID.UUID where
     sqlType _ = SqlOther "uuid"
-
-instance Schema.JSONSchema UUID.UUID where
-    schema uuid = Schema.schema $ fmap (TS.pack . show) uuid
 
 instance PathPiece UUID.UUID where
     fromPathPiece = UUID.fromString . TS.unpack
@@ -148,11 +144,8 @@ mkGenericJson tp = do
                  parseJSON = gparseJsonWithSettings $settings |]
     tj <- [d| instance ToJSON $tp where
                  toJSON = gtoJsonWithSettings $settings |]
-    sc <- [d| instance Schema.JSONSchema  $tp where
-                 schema = Schema.gSchemaWithSettings $settings |]
     return . concat $ [ fj
                       , tj
-                      , sc
                       ]
 
 -- | 'mkJsonType' is 'derivedType' in combination with 'mkGenericJSON'.
@@ -355,19 +348,6 @@ instance (KnownSymbol name, FromJSON fieldType, FromJSON baseType) =>
       return WithField{ withFieldField = f
                       , withFieldBase = b
                       }
-
-instance ( KnownSymbol name
-         , Schema.JSONSchema fieldType
-         , Schema.JSONSchema baseType
-         ) => Schema.JSONSchema (WithField name fieldType baseType) where
-  schema prx =
-    let fName = TS.pack $ symbolVal (Proxy :: Proxy name)
-    in case Schema.schema (withFieldBase <$> prx) of
-         Schema.Object fs
-             -> Schema.Object (fs ++ [Schema.Field fName False
-                                      (Schema.schema
-                                       (withFieldBase <$> prx))])
-         _ -> Schema.Any
 
 -- | Produces an \"ISO\" (ISO 8601) string.
 formatUTC :: UTCTime -> String
