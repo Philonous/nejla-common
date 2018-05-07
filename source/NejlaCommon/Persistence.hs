@@ -115,7 +115,8 @@ module NejlaCommon.Persistence
   , mkUniqueRandomHrID
   ) where
 
-import           Control.Concurrent
+import           Control.Concurrent                (threadDelay)
+import           Control.Concurrent.Async
 import qualified Control.Lens                      as L
 import           Control.Lens.TH
 import           Control.Monad.Base
@@ -189,6 +190,8 @@ promoteOrdInstances  [''Privilege, ''TransactionLevel]
 -- | Application state
 data AppState st = AppState { appStateConnection :: !SqlBackend
                             -- ^ The database connection to work with
+                            , appStatePool :: !ConnectionPool
+                            -- ^ Pool of SQL connections
                             , appStateUserState  :: !st
                             -- ^ User state
                             } deriving ( Typeable, Generic)
@@ -296,6 +299,7 @@ runApp tLevel conf pool ust ((App m) :: App st p l a) =
       setTransactionLevel (fromSing tLevel)
     con <- ask
     let st = AppState { appStateConnection = con
+                      , appStatePool = pool
                       , appStateUserState = ust
                       }
     liftIO $ Ex.catch (go con st $ conf L.^. numRetries) $
@@ -385,12 +389,17 @@ withRepeatableRead (App m) = App m
 withSerializable :: App st p l a -> App st p 'Serializable a
 withSerializable (App m) = App m
 
--- | Run an app action in a new haskell thread
-forkApp :: App st p r () -> App st p r ()
+-- | Run an app action in a new haskell thread using a fresh SQL connection
+forkApp :: App st p r a -> App st p r (Async a)
 forkApp (App m) = do
   st <- App ask
-  _ <- liftIO . forkIO $ runReaderT m st
-  return ()
+  let thread = do
+        -- Grab a new connection so we don't leak the current one
+        flip runSqlPool (appStatePool st) $ do
+          con <- ask
+          let st' = st {appStateConnection = con}
+          liftIO $ runReaderT m st'
+  liftIO $ async thread
 
 --------------------------------------------------------------------------------
 -- Errors ----------------------------------------------------------------------

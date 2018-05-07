@@ -38,6 +38,7 @@ library:
     - NejlaCommon.Test
   dependencies:
     - base >=4.7 && <5.0
+    - async
     - binary
     - case-insensitive >=1.2
     - exceptions >=0.8
