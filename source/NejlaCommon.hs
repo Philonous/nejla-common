@@ -1,6 +1,7 @@
-{-# LANGUAGE FlexibleContexts #-}
 -- Copyright © 2014-2016 Nejla AB. All rights reserved.
 
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -24,35 +25,41 @@ module NejlaCommon ( module NejlaCommon.Wai
                    , formatUTC
                    , parseUTC
                    , withPool
+                   , runPoolRetry
                    ) where
 
 import           Control.Applicative
+import           Control.Concurrent
 import           Control.Monad
+import qualified Control.Monad.Catch         as Ex
 import           Control.Monad.Logger
-import           Control.Monad.Trans hiding (lift)
+import           Control.Monad.Reader        (ReaderT)
+import           Control.Monad.Trans         hiding (lift)
 import           Control.Monad.Trans.Control
 import           Data.Aeson
 import           Data.Data
 import           Data.Default
 import           Data.Maybe
 import           Data.Monoid
-import qualified Data.Text.Encoding as Text
+import           Data.Text                   (Text)
+import qualified Data.Text                   as Text
+import qualified Data.Text.Encoding          as Text
 import           Data.Time.Clock
 import           Data.Time.Format
-import qualified Data.UUID as UUID
+import qualified Data.UUID                   as UUID
 import           Database.Persist.Postgresql
-import           GHC.Generics (Generic)
+import           GHC.Generics                (Generic)
 import           GHC.TypeLits
 import           Generics.Generic.Aeson
-import           Language.Haskell.TH as TH
-import           Language.Haskell.TH.Syntax as TH
+import           Language.Haskell.TH         as TH
+import           Language.Haskell.TH.Syntax  as TH
 import           Web.PathPieces
 
-import qualified Data.ByteString as BS
-import qualified Data.HashMap.Strict as HMap
-import qualified Data.List as L
-import qualified Data.Text as TS
-import qualified Rest.Types.Info as Rest
+import qualified Data.ByteString             as BS
+import qualified Data.HashMap.Strict         as HMap
+import qualified Data.List                   as L
+import qualified Data.Text                   as TS
+import qualified Rest.Types.Info             as Rest
 
 import           NejlaCommon.Config
 import           NejlaCommon.Helpers
@@ -84,27 +91,12 @@ instance PathPiece UUID.UUID where
 instance Rest.Info UUID.UUID where
     describe _ = "uuid"
 
--- | Acquires the database password (from the 'DB_PASSWORD' environment
--- variable) and creates a PostgreSQL connection pool with the specified number
--- of threads.
---
--- The function will try to read and use the following environment variables and
--- config options respectively:
---
--- * "DB_HOST" and "db.host" (defaults to "database")
--- * "DB_USER" and "db.user" (defaults to "postgres)
--- * "DB_DATABASE" and "db.database" (defaults to empty)
--- * "DB_PASSWORD" and "db.password" (defaults to empty)
--- withPool :: Config
---          -> Int -- ^ Number of connections to open
---          -> (ConnectionPool -> LoggingT IO b)
---          -> IO b
-withPool :: (MonadIO m, MonadBaseControl IO m, MonadLogger m) =>
+withPoolNoWait :: (MonadIO m, MonadBaseControl IO m, MonadLogger m) =>
             Config
          -> Int
          -> (ConnectionPool -> m b)
          -> m b
-withPool conf n f = do
+withPoolNoWait conf n f = do
     dbHost <- getConf "DB_HOST" "db.host" (Right "database") conf
     dbUser <- getConf "DB_USER" "db.user" (Right "postgres") conf
     dbDatabase <- getConfMaybe "DB_DATABASE" "db.database" conf
@@ -121,11 +113,37 @@ withPool conf n f = do
               ]
     $logDebug $ "Using connection string: \""
                 <> Text.decodeUtf8 connectionString <> "\""
-
     withPostgresqlPool connectionString n f
   where
     k ..= (Just v) = Just $ k <> "=" <> Text.encodeUtf8 v
     _ ..= Nothing = Nothing
+
+withPool ::
+     (MonadIO m, MonadBaseControl IO m, MonadLogger m, Ex.MonadCatch m)
+  => Config
+  -> Int
+  -> (ConnectionPool -> m b)
+  -> m b
+withPool conf n f = withPoolNoWait conf n $ \pool -> do
+  runPoolRetry pool (return ())
+  f pool
+
+-- | Try to run a database action with a pool and retry until connection can be
+-- established
+runPoolRetry ::
+     (MonadBaseControl IO m, MonadIO m, Ex.MonadCatch m, MonadLogger m)
+  => ConnectionPool
+  -> ReaderT SqlBackend m a
+  -> m a
+runPoolRetry pool f =
+    Ex.catchIOError (runSqlPool f pool) $ \e -> do
+    liftIO $ threadDelay 1000000
+    $logWarn $
+      "Could not connect to database, retrying ( " <>
+      (Text.pack . show . show $ e) <>
+      ")"
+    runPoolRetry pool f
+
 
 -- | Create "trivial" instances for 'FromJSON', 'ToJSON', 'JSONSchema'. The
 -- instance members are set to 'gparseJsonWithSettings', 'gtoJsonWithSettings'
