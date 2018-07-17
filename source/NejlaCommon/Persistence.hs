@@ -240,6 +240,10 @@ instance MonadLogger (App st r l) where
     con <- App $ L.view connection
     liftIO $ connLogFunc con loc logSource logLevel $ toLogStr logStr
 
+instance MonadLoggerIO (App st r l) where
+  askLoggerIO = do
+    con <- App $ L.view connection
+    return $ connLogFunc con
 
 data SqlConfig = SqlConfig { -- | How often to retry the transaction (0 to
                              -- disable retries completely)
