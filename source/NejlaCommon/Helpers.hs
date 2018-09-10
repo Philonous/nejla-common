@@ -1,16 +1,23 @@
+{-# LANGUAGE DeriveLift #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 module NejlaCommon.Helpers where
 
 import           Control.Lens
 import           Data.Aeson.TH
 import           Data.Char
-import           Data.HashMap.Strict (HashMap)
-import qualified Data.HashMap.Strict as HMap
-import qualified Data.List as List
+import           Data.HashMap.Strict        (HashMap)
+import qualified Data.HashMap.Strict        as HMap
+import qualified Data.List                  as List
 import           Data.Monoid
-import           Data.Text (Text)
-import qualified Data.Text as Text
-import           Language.Haskell.TH
+import           Data.Text                  (Text)
+import qualified Data.Text                  as Text
+import qualified Data.Text.Lazy             as LText
+import           Instances.TH.Lift          ()
+import           Language.Haskell.TH        as TH
+import qualified Language.Haskell.TH.Quote  as TH
+import qualified Language.Haskell.TH.Syntax as TH
+import qualified Text.Microstache           as Mustache
 
 --------------------------------------------------------------------------------
 -- General String/Text helpers -------------------------------------------------
@@ -114,3 +121,25 @@ fixName replacements name =
 
 camelCaseFields' :: LensRules
 camelCaseFields' = camelCaseFieldsReplacing defaultReplacements
+
+--------------------------------------------------------------------------------
+-- TH and Quasiquoters ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+deriving instance TH.Lift Mustache.PName
+deriving instance TH.Lift Mustache.Key
+deriving instance TH.Lift Mustache.Node
+deriving instance TH.Lift Mustache.Template
+
+mustache :: TH.QuasiQuoter
+mustache =
+  TH.QuasiQuoter
+  { TH.quoteExp = \str ->
+                    case Mustache.compileMustacheText "quote"
+                                     (LText.pack str) of
+                      Left e -> error (show e)
+                      Right template -> TH.lift template
+  , TH.quotePat  = error "quotePat not defined for moustache"
+  , TH.quoteType = error "quoteType not defined for moustache"
+  , TH.quoteDec  = error "quoteDec not defined for moustache"
+  }

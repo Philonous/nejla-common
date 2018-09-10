@@ -49,6 +49,8 @@ library:
     - http-api-data >=0.3.1
     - http-types >=0.9
     - json-schema
+    - microstache
+    - mime-mail
     - mtl >=2.2
     - path-pieces
     - random
@@ -57,6 +59,7 @@ library:
     - rest-types
     - singletons >=1.1
     - template-haskell >=2.12
+    - th-lift-instances
     - time >=1.5
     - transformers
     - transformers-base
