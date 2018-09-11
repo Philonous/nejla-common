@@ -153,19 +153,18 @@ account default : defaultaccount
 |]
 
 -- | Send an html email using the sendmail program.
-sendHtmlEmail ::
+sendEmail ::
      (MonadLogger m, MonadIO m, MonadThrow m)
   => EmailConfig
   -> Text -- ^ Email Address
   -> Text -- ^ Subject
-  -> LText.Text -- ^ Html Body
+  -> [Mail.Part] -- ^ Mail parts
   -> m Bool
-sendHtmlEmail cfg toAddress subject body = do
+sendEmail cfg toAddress subject parts = do
   let sendmailCfg = cfg ^. sendmail
-  let plainBody = "Please see the HTML attachment."
       to = Mail.Address Nothing toAddress
   let mail =
-        Mail.addPart [Mail.plainPart plainBody, Mail.htmlPart body] $
+        Mail.addPart parts
         (Mail.emptyMail (cfg ^. from))
           {Mail.mailHeaders = [("Subject", subject)], Mail.mailTo = [to]}
   mbError <-
@@ -179,3 +178,24 @@ sendHtmlEmail cfg toAddress subject body = do
       $logError $ "Error sending mail: " <> Text.pack msg
       return False
     Right () -> return True
+
+sendHtmlEmail ::
+     (MonadThrow m, MonadIO m, MonadLogger m)
+  => EmailConfig
+  -> Text
+  -> Text
+  -> LText.Text
+  -> m Bool
+sendHtmlEmail cfg toAddress subject body =
+  let plainBody = "Please see the HTML attachment."
+  in sendEmail cfg toAddress subject [Mail.plainPart plainBody, Mail.htmlPart body]
+
+sendPlainEmail ::
+     (MonadLogger m, MonadIO m, MonadThrow m)
+  => EmailConfig
+  -> Text
+  -> Text
+  -> LText.Text
+  -> m Bool
+sendPlainEmail cfg toAddress subject plainBody =
+  sendEmail cfg toAddress subject [Mail.plainPart plainBody]
