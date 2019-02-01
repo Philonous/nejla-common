@@ -1,6 +1,7 @@
-resolver: lts-10.10
+resolver: lts-13.5
 packages:
 - location: '.'
-extra-deps: []
+extra-deps:
+  - esqueleto-2.6.0
 flags: {}
 extra-package-dbs: []

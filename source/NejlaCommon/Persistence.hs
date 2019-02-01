@@ -121,6 +121,7 @@ import qualified Control.Lens                      as L
 import           Control.Lens.TH
 import           Control.Monad.Base
 import qualified Control.Monad.Catch               as Ex
+import           Control.Monad.Fail                (MonadFail)
 import           Control.Monad.IO.Unlift           (MonadUnliftIO)
 import           Control.Monad.Logger
 import           Control.Monad.Reader
@@ -134,7 +135,6 @@ import qualified Data.Foldable                     as Foldable
 import qualified Data.Function                     as Function
 import qualified Data.List                         as List
 import           Data.Maybe                        (catMaybes, maybeToList)
-import           Data.Monoid
 import qualified Data.Ord                          as Ord
 import           Data.Singletons
 import           Data.Singletons.TH
@@ -144,7 +144,20 @@ import qualified Data.Text.Encoding                as Text
 import qualified Data.Text.Encoding.Error          as Text
 import           Data.Time
 import           Data.UUID                         (UUID)
-import           Database.Esqueleto                as E
+import           Database.Esqueleto                ( SqlBackend, ConnectionPool
+                                                   , Checkmark(..), Esqueleto
+                                                   , Value(..), Entity(..)
+                                                   , PersistField(..)
+                                                   , PersistEntity(..)
+                                                   , EntityDef, HaskellName(..)
+                                                   , ReferenceDef(..)
+                                                   , where_, val, (&&.), (||.)
+                                                   , on, offset, limit
+                                                   , (^.), (?.), (==.), just
+                                                   , isNothing
+                                                   )
+import qualified Database.Esqueleto                as E
+
 import           Database.Esqueleto.Internal.Sql
 import qualified Database.Esqueleto.PostgreSQL     as Postgres
 import qualified Database.PostgreSQL.Simple        as Postgres
@@ -177,7 +190,7 @@ data TransactionLevel = ReadCommitted
 -- be run at the beginning of the transaction
 setTransactionLevel :: MonadIO m => TransactionLevel -> ReaderT SqlBackend m ()
 setTransactionLevel l = do
-    rawExecute ("SET TRANSACTION ISOLATION LEVEL " <> level  l) []
+    E.rawExecute ("SET TRANSACTION ISOLATION LEVEL " <> level  l) []
   where
     level Serializable = "SERIALIZABLE"
     level RepeatableRead = "REPEATABLE READ"
@@ -221,7 +234,7 @@ viewState f = App . L.view $ userState . f
 -- | An App action running in a privilege context @r@ with transaction level @l@
 newtype App (st :: *) (r :: Privilege) (l :: TransactionLevel)
             a = App {unApp :: ReaderT (AppState st) IO a}
-                   deriving (Functor, Applicative, Monad, MonadIO
+                   deriving (Functor, Applicative, Monad, MonadFail, MonadIO
                             , Ex.MonadThrow, Ex.MonadCatch, Ex.MonadMask
                             , MonadBase IO, MonadUnliftIO
                             )
@@ -238,12 +251,12 @@ instance MonadLogger (App st r l) where
   monadLoggerLog loc logSource logLevel logStr = do
     -- We use the log function stored in the SqlBackend
     con <- App $ L.view connection
-    liftIO $ connLogFunc con loc logSource logLevel $ toLogStr logStr
+    liftIO $ E.connLogFunc con loc logSource logLevel $ toLogStr logStr
 
 instance MonadLoggerIO (App st r l) where
   askLoggerIO = do
     con <- App $ L.view connection
-    return $ connLogFunc con
+    return $ E.connLogFunc con
 
 data SqlConfig = SqlConfig { -- | How often to retry the transaction (0 to
                              -- disable retries completely)
@@ -298,7 +311,7 @@ runApp :: Sing l -- ^ mode to run the transaction in (see 'serializable',
        -> App st p l a
        -> IO a
 runApp tLevel conf pool ust ((App m) :: App st p l a) =
-  flip runSqlPool pool $ do
+  flip E.runSqlPool pool $ do
     when (conf L.^. useTransactionLevels) $
       setTransactionLevel (fromSing tLevel)
     con <- ask
@@ -321,7 +334,7 @@ runApp tLevel conf pool ust ((App m) :: App st p l a) =
     utf8 = Text.decodeUtf8With Text.lenientDecode
     go con st retries = do
         Ex.catch (liftIO $ runReaderT m st) $ \e -> do
-          runReaderT transactionUndo con
+          runReaderT E.transactionUndo con
           case Postgres.sqlState e `elem` (conf L.^. retryableErrors)
                && retries > 0
             of
@@ -373,7 +386,7 @@ db' = unprivileged . db
 {-# INLINE db' #-}
 
 -- | Run a lower-loeveled action in a higher-leveled context
-withLevel :: ((newLevel :<= oldLevel) ~ 'True) =>
+withLevel :: ((newLevel <= oldLevel) ~ 'True) =>
              App st p newLevel a
           -> App st p oldLevel a
 withLevel (App m) = App m
@@ -384,7 +397,7 @@ withReadCommitted :: App st p 'ReadCommitted a
 withReadCommitted (App m) = (App m)
 
 -- | Annotate or upgrade an operation as requiring Repeatable Read
-withRepeatableRead :: ((l :<= 'RepeatableRead) ~ 'True) =>
+withRepeatableRead :: ((l <= 'RepeatableRead) ~ 'True) =>
                       App st p l a
                    -> App st p 'RepeatableRead a
 withRepeatableRead (App m) = App m
@@ -399,7 +412,7 @@ forkApp (App m) = do
   st <- App ask
   let thread = do
         -- Grab a new connection so we don't leak the current one
-        flip runSqlPool (appStatePool st) $ do
+        flip E.runSqlPool (appStatePool st) $ do
           con <- ask
           let st' = st {appStateConnection = con}
           liftIO $ runReaderT m st'
@@ -559,11 +572,11 @@ type SVM a = SqlExpr (Maybe (Entity a))
 emptyArray :: SqlExpr (Value [a])
 emptyArray = unsafeSqlValue "'{}'"
 
-arrayRemoveNull :: SqlExpr (Value [Maybe a]) -> SqlExpr (Value [a])
-arrayRemoveNull x = unsafeSqlFunction "array_remove" (x, unsafeSqlValue "NULL")
-
-arrayAgg' :: PersistField [a] => SqlExpr (Value (Maybe a)) -> SqlExpr (Value [a])
-arrayAgg' =  arrayRemoveNull . Postgres.arrayAgg
+arrayAgg' :: PersistField [a] => SqlExpr (Value (Maybe a))
+                              -> SqlExpr (Value [a])
+arrayAgg' x =
+  Postgres.arrayRemoveNull $
+  Postgres.unsafeSqlAggregateFunction "array_agg" Postgres.AggModeAll x []
 
 --------------------------------------------------------------------------------
 -- App helpers (Postgres specific) ---------------------------------------------
@@ -612,11 +625,11 @@ sqlFormatTime time formatstring = unsafeSqlFunction "to_char" (time, formatstrin
 
 -- | Set constraints to DEFERRED
 deferrConstraints :: MonadIO m => ReaderT SqlBackend m ()
-deferrConstraints = rawExecute "SET CONSTRAINTS ALL DEFERRED;" []
+deferrConstraints = E.rawExecute "SET CONSTRAINTS ALL DEFERRED;" []
 
 -- | Set constraints to IMMEDIATE
 undeferrConstraints :: MonadIO m => ReaderT SqlBackend m ()
-undeferrConstraints = rawExecute "SET CONSTRAINTS ALL IMMEDIATE;" []
+undeferrConstraints = E.rawExecute "SET CONSTRAINTS ALL IMMEDIATE;" []
 
 --------------------------------------------------------------------------------
 -- Uniquenes Constraints -------------------------------------------------------
@@ -652,9 +665,9 @@ insertUniqueConflict :: (DescribeUnique a, PersistEntityBackend a ~ SqlBackend) 
                         a
                      -> App st 'Privileged 'ReadCommitted (Key a)
 insertUniqueConflict x = do
-    mbCfl <- db' $ checkUnique x
+    mbCfl <- db' $ E.checkUnique x
     case mbCfl of
-     Nothing -> db' $ insert x
+     Nothing -> db' $ E.insert x
      Just cfl -> liftIO . Ex.throwM $ conflict cfl
 
 -- | Replace a value, throwing a Conflict exception when a uniqueness constraint
@@ -665,7 +678,7 @@ replaceUniqueConflict :: (Eq a, Eq (Unique a), DescribeUnique a,
                       -> a
                       -> App st 'Privileged 'ReadCommitted ()
 replaceUniqueConflict k v = do
-    mbCfl <- db' $ replaceUnique k v
+    mbCfl <- db' $ E.replaceUnique k v
     case mbCfl of
      Nothing -> return ()
      Just cfl -> liftIO . Ex.throwM $ conflict cfl
@@ -683,7 +696,7 @@ getByNotFound :: (PersistEntity val, Show a,
                   PersistEntityBackend val ~ SqlBackend) =>
                  Text -> a -> Unique val -> App st 'Unprivileged 'ReadCommitted (Entity val)
 getByNotFound entType entName p = do
-    g <- db $ getBy p
+    g <- db $ E.getBy p
     case g of
         Nothing -> notFound entType entName
         Just e -> return e
@@ -696,7 +709,7 @@ getByNotFound' p = getByNotFound (uniqueType p) (uniqueFieldNames p) p
 getNotFound :: (PersistEntity b, PersistEntityBackend b ~ SqlBackend) =>
                Text -> Key b -> App st 'Unprivileged 'ReadCommitted b
 getNotFound entType p = do
-    g <- db $ get p
+    g <- db $ E.get p
     case g of
         Nothing -> notFound entType p
         Just e -> return e
@@ -871,21 +884,21 @@ onForeignKey x y = on $ foreignKey x y
 foreignEnts :: [EntityDef] -> [((String, String), [[(String, String)]])]
 foreignEnts ents = merge $ do
   ent <- ents
-  let entName = unHaskellName $ entityHaskell ent
+  let entName = unHaskellName $ E.entityHaskell ent
   -- References to the implicit EntityId fields
   let implicits = do
-        field <- entityFields ent
-        let nm = unHaskellName $ fieldHaskell field
-        ref <- fromForeignRefs $ fieldReference field
+        field <- E.entityFields ent
+        let nm = unHaskellName $ E.fieldHaskell field
+        ref <- fromForeignRefs $ E.fieldReference field
         return ( (Text.unpack entName, Text.unpack ref)
                , [(toField entName nm
                   , Text.unpack $  ref <> "Id")])
   -- References that use explicit »Primary« and »Foreign» declarations
       explicits = do
-        frgn <- entityForeigns ent
-        let remote = unHaskellName $ foreignRefTableHaskell frgn
+        frgn <- E.entityForeigns ent
+        let remote = unHaskellName $ E.foreignRefTableHaskell frgn
         return . ((Text.unpack entName,  Text.unpack remote), ) $ do
-          ((HaskellName f, _), (HaskellName t, _)) <- foreignFields frgn
+          ((HaskellName f, _), (HaskellName t, _)) <- E.foreignFields frgn
           return (toField entName f, toField remote t)
   implicits <> explicits
   where
@@ -972,7 +985,7 @@ mkUniqueRandomHrID fromCandidate len field = do
     candidate <- liftIO $ mkRandomHrID len
     [Value rows] <- db . select . E.from $ \o -> do
         where_ $ o ^. field ==. val (fromCandidate candidate)
-        return $ countRows
+        return $ E.countRows
     if (rows :: Rational) > 0
         then mkUniqueRandomHrID fromCandidate len field
         else return $ fromCandidate candidate

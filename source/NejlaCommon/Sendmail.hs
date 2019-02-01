@@ -182,9 +182,9 @@ sendEmail cfg toAddress subject parts = do
 sendHtmlEmail ::
      (MonadThrow m, MonadIO m, MonadLogger m)
   => EmailConfig
-  -> Text
-  -> Text
-  -> LText.Text
+  -> Text -- ^ Address
+  -> Text -- ^ Subject
+  -> LText.Text -- ^ HTML attachment
   -> m Bool
 sendHtmlEmail cfg toAddress subject body =
   let plainBody = "Please see the HTML attachment."
@@ -193,9 +193,9 @@ sendHtmlEmail cfg toAddress subject body =
 sendPlainEmail ::
      (MonadLogger m, MonadIO m, MonadThrow m)
   => EmailConfig
-  -> Text
-  -> Text
-  -> LText.Text
+  -> Text -- ^ Address
+  -> Text -- ^ Subject
+  -> LText.Text -- ^ Body
   -> m Bool
 sendPlainEmail cfg toAddress subject plainBody =
   sendEmail cfg toAddress subject [Mail.plainPart plainBody]

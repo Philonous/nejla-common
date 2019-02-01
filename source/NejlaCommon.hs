@@ -20,8 +20,6 @@ module NejlaCommon ( module NejlaCommon.Wai
                    , DerivedData(..)
                    , WithField(..)
                    , derivedType
-                   , mkGenericJson
-                   , mkJsonType
                    , formatUTC
                    , parseUTC
                    , withPool
@@ -32,6 +30,7 @@ import           Control.Applicative
 import           Control.Concurrent
 import           Control.Monad
 import qualified Control.Monad.Catch         as Ex
+import           Control.Monad.IO.Unlift     (MonadUnliftIO)
 import           Control.Monad.Logger
 import           Control.Monad.Reader        (ReaderT)
 import           Control.Monad.Trans         hiding (lift)
@@ -40,8 +39,6 @@ import           Data.Aeson
 import           Data.Data
 import           Data.Default
 import           Data.Maybe
-import           Data.Monoid
-import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
 import qualified Data.Text.Encoding          as Text
 import           Data.Time.Clock
@@ -50,16 +47,13 @@ import qualified Data.UUID                   as UUID
 import           Database.Persist.Postgresql
 import           GHC.Generics                (Generic)
 import           GHC.TypeLits
-import           Generics.Generic.Aeson
 import           Language.Haskell.TH         as TH
-import           Language.Haskell.TH.Syntax  as TH
 import           Web.PathPieces
 
 import qualified Data.ByteString             as BS
 import qualified Data.HashMap.Strict         as HMap
 import qualified Data.List                   as L
 import qualified Data.Text                   as TS
-import qualified Rest.Types.Info             as Rest
 
 import           NejlaCommon.Config
 import           NejlaCommon.Helpers
@@ -88,14 +82,12 @@ instance PathPiece UUID.UUID where
     fromPathPiece = UUID.fromString . TS.unpack
     toPathPiece = TS.pack . UUID.toString
 
-instance Rest.Info UUID.UUID where
-    describe _ = "uuid"
-
-withPoolNoWait :: (MonadIO m, MonadBaseControl IO m, MonadLogger m) =>
-            Config
-         -> Int
-         -> (ConnectionPool -> m b)
-         -> m b
+withPoolNoWait ::
+     (MonadIO m, MonadUnliftIO m, MonadBaseControl IO m, MonadLogger m)
+  => Config
+  -> Int
+  -> (ConnectionPool -> m b)
+  -> m b
 withPoolNoWait conf n f = do
     dbHost <- getConf "DB_HOST" "db.host" (Right "database") conf
     dbUser <- getConf "DB_USER" "db.user" (Right "postgres") conf
@@ -119,7 +111,12 @@ withPoolNoWait conf n f = do
     _ ..= Nothing = Nothing
 
 withPool ::
-     (MonadIO m, MonadBaseControl IO m, MonadLogger m, Ex.MonadCatch m)
+     ( MonadIO m
+     , MonadUnliftIO m
+     , MonadBaseControl IO m
+     , MonadLogger m
+     , Ex.MonadCatch m
+     )
   => Config
   -> Int
   -> (ConnectionPool -> m b)
@@ -131,7 +128,7 @@ withPool conf n f = withPoolNoWait conf n $ \pool -> do
 -- | Try to run a database action with a pool and retry until connection can be
 -- established
 runPoolRetry ::
-     (MonadBaseControl IO m, MonadIO m, Ex.MonadCatch m, MonadLogger m)
+     (MonadIO m, MonadUnliftIO m, Ex.MonadCatch m, MonadLogger m)
   => ConnectionPool
   -> ReaderT SqlBackend m a
   -> m a
@@ -143,35 +140,6 @@ runPoolRetry pool f =
       (Text.pack . show . show $ e) <>
       ")"
     runPoolRetry pool f
-
-
--- | Create "trivial" instances for 'FromJSON', 'ToJSON', 'JSONSchema'. The
--- instance members are set to 'gparseJsonWithSettings', 'gtoJsonWithSettings'
--- and 'gSchemaWithSettings' respectively with options set to strip the type
--- name as a prefix.
-mkGenericJson :: Q Type -> Q [Dec]
-mkGenericJson tp = do
-    t <- tp
-    -- If the type is a simple type, strip its name from the field names
-    let prefix =
-            case t of
-             ConT tpnm -> Just . downcase $ nameBase tpnm
-             _ -> Nothing
-        settings = [| Settings{stripPrefix = $(lift prefix)} |]
-    fj <- [d| instance FromJSON $tp where
-                 parseJSON = gparseJsonWithSettings $settings |]
-    tj <- [d| instance ToJSON $tp where
-                 toJSON = gtoJsonWithSettings $settings |]
-    return . concat $ [ fj
-                      , tj
-                      ]
-
--- | 'mkJsonType' is 'derivedType' in combination with 'mkGenericJSON'.
-mkJsonType :: TH.Name -> DerivedData -> Q [Dec]
-mkJsonType name dd = do
-    tp@(DataD _ name' _ _ _ _:_) <- derivedType name dd
-    instances <- mkGenericJson (return $ ConT name')
-    return $ tp ++ instances
 
 -- | See 'derivedType'.
 data DerivedData = DD { derivedPrefix :: String
