@@ -1,7 +1,9 @@
-resolver: lts-13.5
+resolver: nightly-2019-07-30
 packages:
-- location: '.'
-extra-deps:
-  - esqueleto-2.6.0
 flags: {}
 extra-package-dbs: []
+
+nix:
+  packages:
+    - zlib
+    - postgresql

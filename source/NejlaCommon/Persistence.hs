@@ -145,7 +145,7 @@ import qualified Data.Text.Encoding.Error          as Text
 import           Data.Time
 import           Data.UUID                         (UUID)
 import           Database.Esqueleto                ( SqlBackend, ConnectionPool
-                                                   , Checkmark(..), Esqueleto
+                                                   , Checkmark(..)
                                                    , Value(..), Entity(..)
                                                    , PersistField(..)
                                                    , PersistEntity(..)
@@ -515,52 +515,45 @@ boolCheckmark = L.iso boolToCheckmark checkmarkToBool
 --------------------------------------------------------------------------------
 
 -- | @OR@ a list of predicates. An empty list becomes 'False'
-orL :: Esqueleto query expr backend =>
-       [expr (Value Bool)]
-    -> expr (Value Bool)
+orL :: [SqlExpr (Value Bool)]
+    -> SqlExpr (Value Bool)
 orL [] = val False
 orL (p:ps) = List.foldl' (||.) p ps
 
 -- | @AND@ a list of predicates. An Empty list becomes 'True'
-andL :: Esqueleto query expr backend =>
-        [expr (Value Bool)] -> expr (Value Bool)
+andL :: [SqlExpr (Value Bool)] -> SqlExpr (Value Bool)
 andL [] = val True
 andL (p:ps) = List.foldl' (&&.) p ps
 
 -- | @AND@ a list of predicates (ignoring Nothing values).
-andLMb :: Esqueleto query expr backend =>
-          [Maybe (expr (Value Bool))]
-       -> expr (Value Bool)
+andLMb :: [Maybe (SqlExpr (Value Bool))]
+       -> SqlExpr (Value Bool)
 andLMb = andL . catMaybes
 
 -- | @WHERE@ on a list of predicates (conjunction)
-whereL :: Esqueleto query expr backend => [expr (Value Bool)] -> query ()
+whereL :: [SqlExpr (Value Bool)] -> SqlQuery ()
 whereL [] = return ()
 whereL xs = where_ $ andL xs
 
 -- | WHERE on a list of optional predicates (conjunction, ignoring 'Nothing''s)
-whereLMb :: Esqueleto query expr backend =>
-            [Maybe (expr (Value Bool))] -> query ()
+whereLMb :: [Maybe (SqlExpr (Value Bool))] -> SqlQuery ()
 whereLMb = whereL . catMaybes
 
 -- | ON on a list of predicates.
-onL :: Esqueleto query expr backend =>
-       [expr (Value Bool)]
-    -> query ()
+onL :: [SqlExpr (Value Bool)]
+    -> SqlQuery ()
 -- ON will be preserved even if the list is empty. This is important.
 onL = on . andL
 
 -- | ON on a list of optional predicates, ignoring Nothings
-onLMb :: Esqueleto query expr backend =>
-         [Maybe (expr (Value Bool))]
-      -> query ()
+onLMb :: [Maybe (SqlExpr (Value Bool))]
+      -> SqlQuery ()
 onLMb = onL . catMaybes
 
 -- | Set offset and limit for the query.
-offsetLimit  :: (Esqueleto m expr backend ) =>
-                Maybe Int
+offsetLimit  :: Maybe Int
              -> Maybe Int
-             -> m ()
+             -> SqlQuery ()
 offsetLimit os l = do
     Foldable.forM_ os $ offset . fromIntegral
     Foldable.forM_ l $ limit . fromIntegral
@@ -780,12 +773,12 @@ class ForeignKey a b where
 
 -- | Apply f to each pair of foreign fields (most likely some variant of equality)
 withForeignPairs ::
-     (ForeignKey a b, Esqueleto query expr backend)
+     (ForeignKey a b)
   => (forall f. (PersistField f, PersistEntity a, PersistEntity b)  =>
                 EntityField a f
              -> EntityField b f
-             -> expr (Value Bool))
-  -> expr (Value Bool)
+             -> SqlExpr (Value Bool))
+  -> SqlExpr (Value Bool)
 withForeignPairs f = andL . flip map (foreignPairs) $ \case
   (ForeignPair xk yk) -> f xk yk
 
@@ -798,39 +791,39 @@ withForeignPairs f = andL . flip map (foreignPairs) $ \case
 --   where_ (foreignKey team employee)
 --   [...]
 -- @
-foreignKey :: (ForeignKey a b, Esqueleto query expr backend) =>
-              expr (Entity a) -> expr (Entity b) -> expr (Value Bool)
+foreignKey :: (ForeignKey a b) =>
+              SqlExpr (Entity a) -> SqlExpr (Entity b) -> SqlExpr (Value Bool)
 foreignKey x y = withForeignPairs $ \xk yk -> x ^. xk ==. y ^. yk
 
 -- | 'foreignKey' for 'RightOuterJoin'
-foreignKeyR  :: (ForeignKey a b, Esqueleto query expr backend) =>
-               expr (Entity a) -> expr (Maybe (Entity b)) -> expr (Value Bool)
+foreignKeyR  :: (ForeignKey a b) =>
+               SqlExpr (Entity a) -> SqlExpr (Maybe (Entity b)) -> SqlExpr (Value Bool)
 foreignKeyR x y = withForeignPairs $ \xk yk ->just (x ^. xk) ==. y ?. yk
 
 -- | 'foreignKey' for 'LeftOuterJoin'
-foreignKeyL  :: (ForeignKey a b, Esqueleto query expr backend) =>
-               expr (Maybe (Entity a)) -> expr (Entity b) -> expr (Value Bool)
+foreignKeyL  :: (ForeignKey a b) =>
+               SqlExpr (Maybe (Entity a)) -> SqlExpr (Entity b) -> SqlExpr (Value Bool)
 foreignKeyL x y = withForeignPairs $ \xk yk ->(x ?. xk) ==. just (y ^. yk)
 
 -- | 'foreignKey' for 'FullOuterJoin'
-foreignKeyLR  :: (ForeignKey a b, Esqueleto query expr backend) =>
-               expr (Maybe (Entity a)) -> expr (Maybe (Entity b)) -> expr (Value Bool)
+foreignKeyLR  :: (ForeignKey a b) =>
+               SqlExpr (Maybe (Entity a)) -> SqlExpr (Maybe (Entity b)) -> SqlExpr (Value Bool)
 foreignKeyLR x y = withForeignPairs $ \xk yk ->(x ?. xk) ==. (y ?. yk)
 
 -- | Compare an entity field to a Haskell 'Maybe' value. NOTE: Simply using
 -- @==.@ does __not__ work! @NULL ==. Nothing@ will evaluate to @NULL@!
-mbEq :: (PersistField typ, Esqueleto query expr backend) =>
-        expr (Value (Maybe typ))
-     -> Maybe typ -> expr (Value Bool)
+mbEq :: (PersistField typ) =>
+        SqlExpr (Value (Maybe typ))
+     -> Maybe typ -> SqlExpr (Value Bool)
 mbEq v1 Nothing  = isNothing v1
 mbEq v1 (Just v2)  = v1 ==. just (val v2)
 
 
 -- | Like foreignKeyL, but also matches if the foreign reference is NULL
-foreignKeyLMaybe :: (Esqueleto query expr backend, ForeignKey a b) =>
-                    expr (Maybe( Entity a))
-                 -> expr (Entity b)
-                 -> expr (Value Bool)
+foreignKeyLMaybe :: (ForeignKey a b) =>
+                    SqlExpr (Maybe( Entity a))
+                 -> SqlExpr (Entity b)
+                 -> SqlExpr (Value Bool)
 foreignKeyLMaybe x y =
   withForeignPairs $ \xk yk ->
          orL [ isNothing (x ?. xk)
@@ -838,10 +831,10 @@ foreignKeyLMaybe x y =
              ]
 
 -- | Like foreignKeyR, but also matches if the target key field is NULL
-foreignKeyRMaybe :: (Esqueleto query expr backend, ForeignKey a b) =>
-                    expr (Entity a)
-                 -> expr (Maybe (Entity b))
-                 -> expr (Value Bool)
+foreignKeyRMaybe :: (ForeignKey a b) =>
+                    SqlExpr (Entity a)
+                 -> SqlExpr (Maybe (Entity b))
+                 -> SqlExpr (Value Bool)
 foreignKeyRMaybe x y =
   withForeignPairs $ \xk yk ->
          orL [ isNothing (y ?. yk)
@@ -850,10 +843,10 @@ foreignKeyRMaybe x y =
 
 -- | Like foreignKeyLR, but also matches if foreign reference or target key are
 -- null
-foreignKeyLRMaybe :: (Esqueleto query expr backend, ForeignKey a b) =>
-                    expr (Maybe( Entity a))
-                 -> expr (Maybe (Entity b))
-                 -> expr (Value Bool)
+foreignKeyLRMaybe :: (ForeignKey a b) =>
+                    SqlExpr (Maybe( Entity a))
+                 -> SqlExpr (Maybe (Entity b))
+                 -> SqlExpr (Value Bool)
 foreignKeyLRMaybe x y =
   withForeignPairs $ \xk yk ->
          orL [ isNothing (x ?. xk)
@@ -871,8 +864,8 @@ foreignKeyLRMaybe x y =
 -- from $ \(team \`InnerJoin\` employee) ->
 --   onForeignKey team employee
 -- @
-onForeignKey :: (Esqueleto query expr backend, ForeignKey a b) =>
-                expr (Entity a) -> expr (Entity b) -> query ()
+onForeignKey :: (ForeignKey a b) =>
+                SqlExpr (Entity a) -> SqlExpr (Entity b) -> SqlQuery ()
 onForeignKey x y = on $ foreignKey x y
 
 --------------------------------------------------------------------------------
