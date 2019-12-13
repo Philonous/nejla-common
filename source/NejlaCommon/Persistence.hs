@@ -385,7 +385,7 @@ db' :: ReaderT SqlBackend IO b -> App st 'Privileged 'ReadCommitted b
 db' = unprivileged . db
 {-# INLINE db' #-}
 
--- | Run a lower-loeveled action in a higher-leveled context
+-- | Run a lower-leveled action in a higher-leveled context
 withLevel :: ((newLevel <= oldLevel) ~ 'True) =>
              App st p newLevel a
           -> App st p oldLevel a
@@ -881,6 +881,8 @@ foreignEnts ents = merge $ do
   -- References to the implicit EntityId fields
   let implicits = do
         field <- E.entityFields ent
+        -- We don't handle optional foreign references for now.
+        when ("Maybe" `elem` E.fieldAttrs field) $ []
         let nm = unHaskellName $ E.fieldHaskell field
         ref <- fromForeignRefs $ E.fieldReference field
         return ( (Text.unpack entName, Text.unpack ref)
