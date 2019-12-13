@@ -891,6 +891,19 @@ foreignEnts ents = merge $ do
   -- References that use explicit »Primary« and »Foreign» declarations
       explicits = do
         frgn <- E.entityForeigns ent
+        -- Check if the foreign reference involves a maybe field
+        when ("Maybe" `elem` [ attr
+                             -- Find fields the current foreign reference
+                             -- involves
+                             | ((nm,_), _) <- E.foreignFields frgn
+                             -- Find the definitions of these fields in the entity
+                             , field <- E.entityFields ent
+                             , E.fieldHaskell field == nm
+                             -- Return attributes of these fields
+                             , attr <- E.fieldAttrs field
+                             ])
+          []
+
         let remote = unHaskellName $ E.foreignRefTableHaskell frgn
         return . ((Text.unpack entName,  Text.unpack remote), ) $ do
           ((HaskellName f, _), (HaskellName t, _)) <- E.foreignFields frgn
