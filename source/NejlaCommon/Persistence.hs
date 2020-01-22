@@ -681,9 +681,9 @@ replaceUniqueConflict k v = do
 --------------------------------------------------------------------------------
 
 
-notFound :: (MonadIO m, Show a) => Text -> a -> m b
+notFound :: (Ex.MonadThrow m, Show a) => Text -> a -> m b
 notFound entType entName =
-    liftIO . Ex.throwM $ EntityNotFound entType (Text.pack $ show entName)
+    Ex.throwM $ EntityNotFound entType (Text.pack $ show entName)
 
 getByNotFound :: (PersistEntity val, Show a,
                   PersistEntityBackend val ~ SqlBackend) =>
