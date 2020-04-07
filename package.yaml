@@ -88,3 +88,4 @@ tests:
       - temporary
       - time
       - template-haskell
+      - unliftio

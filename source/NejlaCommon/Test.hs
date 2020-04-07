@@ -11,7 +11,6 @@ import qualified Data.Aeson                as Aeson
 import qualified Data.ByteString           as BS
 import qualified Data.ByteString.Lazy      as BSL
 import           Data.Data                 (Proxy(..))
-import           Data.Monoid
 import           GHC.Stack                 (withFrozenCallStack)
 import           Network.HTTP.Types.Status
 
@@ -31,12 +30,12 @@ shouldBe :: (Eq a, Show a, MonadIO m) => a -> a -> m ()
 shouldBe x y = withFrozenCallStack $ liftIO $ HSpec.shouldBe x y
 
 -- | Like Test.Hspec.Wai.post, but sets Content-Type to json
-postJ :: BS.ByteString -> BSL.ByteString -> WaiSession SResponse
+postJ :: BS.ByteString -> BSL.ByteString -> WaiSession st SResponse
 postJ path bd =
   Wai.request "POST" path [("Content-Type", "application/json")] bd
 
 -- | Like Test.Hspec.Wai.put, but sets Content-Type to json
-putJ :: BS.ByteString -> BSL.ByteString -> WaiSession SResponse
+putJ :: BS.ByteString -> BSL.ByteString -> WaiSession st SResponse
 putJ path bd =
   Wai.request "PUT" path [("Content-Type", "application/json")] bd
 

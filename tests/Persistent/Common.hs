@@ -1,15 +1,18 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Persistent.Common where
 
@@ -19,16 +22,17 @@ import Control.Monad
 import Control.Monad.Logger
 import Control.Monad.Reader
 import Control.Monad.Trans.Control
-import Data.ByteString (ByteString)
+import Data.ByteString             (ByteString)
 import Data.Default
 import Data.Singletons
 import Data.Singletons.Prelude.Ord
-import Data.Text (Text)
-import Database.Esqueleto as E
+import Data.Text                   (Text)
+import Database.Esqueleto          as E
 import Database.Persist.Postgresql
 import Database.Persist.TH
 import System.Environment
 import System.IO
+import UnliftIO                    (MonadUnliftIO)
 
 import NejlaCommon
 
@@ -46,7 +50,8 @@ Foo
 connectionString :: ByteString
 connectionString = "dbname=nejlacommon-test"
 
-run :: (MonadIO m, ('ReadCommitted :<= level) ~ 'True) =>
+run :: ( MonadIO m, MonadUnliftIO m
+       , ('NejlaCommon.ReadCommitted <= level) ~ 'True) =>
         Sing level
      -> Int
     -> ConnectionPool
@@ -76,7 +81,7 @@ withDB' debug (f :: ConnectionPool -> IO a) = do
     False -> runNoLoggingT go
     True -> runStderrLoggingT go
   where
-    go :: (MonadIO m, MonadLogger m, MonadBaseControl IO m) => m a
+    go :: (MonadIO m, MonadLogger m, MonadUnliftIO m) => m a
     go = do
       withPostgresqlPool connectionString 3 $ \pool -> do
         -- Setup database
@@ -104,7 +109,7 @@ resetDB = forM_ resetCommands $ \c -> rawExecute c []
 commit :: MonadIO m => ReaderT SqlBackend m ()
 commit = transactionSave
 
-getSum :: (MonadIO m) =>
+getSum :: (MonadIO m, MonadFail m) =>
           Int
        -> ReaderT SqlBackend m Rational
 getSum i = do
