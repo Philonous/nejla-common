@@ -1,0 +1,139 @@
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE LambdaCase #-}
+
+-- | Database schema versioning and Migration
+--
+--
+module NejlaCommon.Persistence.Migration
+  ( sql
+  , sqlFile
+  , migrate
+  , M
+  , SchemaVersion
+  , Migration(..)
+  ) where
+
+import           Control.Monad.Logger
+import           Control.Monad.Reader
+import qualified Data.List            as List
+import           Data.Text            (Text)
+import qualified Database.Persist.Sql as P
+import           NejlaCommon.Persistence.Util     (sql, sqlFile)
+
+import           System.Exit          (exitFailure)
+
+type M a = ReaderT P.SqlBackend (LoggingT IO) a
+type SchemaVersion = Text
+
+-- | Check if a schema is empty (e.g. hasn't been initualized)
+--   Postgres-specfic
+schemaEmptyP :: Text -- ^ Name of the schema
+             -> M Bool
+schemaEmptyP schema = do
+  res <- P.rawSql [sql|
+    SELECT relname
+    FROM pg_class c
+    INNER JOIN pg_namespace s
+    ON s.oid = c.relnamespace
+    WHERE s.nspname=?
+    |] [P.PersistText schema] :: M [P.Single Text]
+  return $ List.null res
+
+setupMetaSchema :: M ()
+setupMetaSchema =
+   schemaEmptyP "_meta" >>= \case
+    -- DB versioning not initialized
+    True -> do
+      $logInfo "Schema versioning not found. Initializing now."
+      P.rawExecute $(sqlFile "source/NejlaCommon/Persistence/sql/initialize_versioning.sql") []
+      registerMigration "" Nothing "initial" "Initial setup"
+    -- Schema versioning already installed
+    False -> return ()
+
+-- | Query the current schema version
+currentSchemaVersion :: M (Maybe SchemaVersion)
+currentSchemaVersion = do
+  P.rawSql [sql|
+               SELECT _meta.schema_version();
+               |] [] >>= \case
+                  [Nothing] -> return Nothing
+                  [Just (P.Single i)] -> return $ Just i
+                  _ -> error "currentSchemaVersion: wrong number of results"
+
+
+-- | Register a migration. Shouldn't be used manually
+registerMigration :: Text -- ^ Program revision (e.g. git revision)
+                  -> Maybe SchemaVersion -- ^ Expected schema version before migration
+                  -> SchemaVersion -- ^ Schema version after the migration
+                  -> Text -- ^ Description of the migration changes
+                  -> M ()
+registerMigration revision expect to description = do
+  _ <- P.rawSql [sql| SELECT _meta.add_migration(?, ?, ?, ?);
+                         |] [ maybe P.PersistNull P.PersistText expect
+                            , P.PersistText to
+                            , P.PersistText description
+                            , P.PersistText revision
+                            ]
+                            :: M [P.Single P.PersistValue]
+  return ()
+
+-- | Run a migration
+runMigration :: Text -- ^ Program revision
+             -> Migration
+             -> M ()
+runMigration revision Migration{..} = do
+  $logInfo $ "Migrating database schema from " <> expect <> " to " <> to <> " ("
+    <> description <> ")"
+  script
+  registerMigration revision (Just expect) to description
+
+data Migration = Migration { expect :: SchemaVersion
+                           -- ^ Expected schema version before the migration
+                           , to :: SchemaVersion
+                           -- ^ Schema version after the migration
+                           , description :: Text
+                           -- ^ Description of the migration
+                           , script :: M ()
+                           }
+
+findMigration :: Text ->SchemaVersion -> [Migration] -> M ()
+findMigration _r v [Migration{..}] | v == to =
+  $logInfo $ "Already in schema version " <> v <> "; nothing to do."
+                                -- Already in final schema version
+findMigration revision v ms@(Migration{..}:mss)
+  | v == expect = runMigrations revision v ms
+  | otherwise = findMigration revision v mss
+findMigration _r v _ = do
+  $logError $ "Unknown schema version " <> v
+  liftIO exitFailure
+
+runMigrations :: Text -> SchemaVersion -> [Migration] -> M ()
+runMigrations _ v [] = do
+  $logInfo $ "Finished migrations. Final schema: " <> v
+  return ()
+runMigrations revision v (m@Migration{..}:ms) | v == expect = do
+  runMigration revision m >> runMigrations revision to ms
+                                              | otherwise = do
+  $logError $ "runMigrations: Unknown schema version " <> v
+  liftIO exitFailure
+
+-- | Finds the current schema version and runs all migrations linearly starting
+-- from that version.
+--
+-- Takes a list of migrations. Each migration should leave the schema in the
+-- version the next migration expects (that is, the @to@-field of migration @n@
+-- should match the @expect@-field of migration @n+1@)
+migrate :: Text -- ^ Program revision (e.g. $(gitHash) from gitrev)
+        -> [Migration]
+        -> M ()
+migrate revision migrations = do
+  setupMetaSchema
+  currentSchemaVersion >>= \case
+    Nothing -> do
+      $logError "Couldn't find schema version"
+      liftIO exitFailure
+    Just v -> findMigration revision v migrations
