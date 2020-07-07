@@ -23,7 +23,9 @@ module NejlaCommon ( module NejlaCommon.Wai
                    , formatUTC
                    , parseUTC
                    , withPool
+                   , withDBPool
                    , runPoolRetry
+                   , getDBConnectInfo
                    ) where
 
 import           Control.Applicative
@@ -82,6 +84,31 @@ instance PathPiece UUID.UUID where
     fromPathPiece = UUID.fromString . TS.unpack
     toPathPiece = TS.pack . UUID.toString
 
+-- | Parse database connection info from configuration file or environment
+-- variables. The relevant variables are
+--
+-- * DB_HOST / db.host (default = "localhost")
+-- * DB_PORT / db.port (default = 5432)
+-- * DB_USER / db.user  (default = "postgres")
+-- * DB_PASSWORD / db.password (default = "")
+-- * DB_DATABASE / db.database (default = "postgres")
+
+getDBConnectInfo :: (MonadLogger m, MonadIO m) => Config -> m ConnectInfo
+getDBConnectInfo conf = do
+  dbHost <- getConf "DB_HOST" "db.host" (Right "localhost") conf
+  dbUser <- getConf "DB_USER" "db.user" (Right "postgres") conf
+  dbDatabase <- getConf "DB_DATABASE" "db.database" (Right "postgres") conf
+  dbPassword <- getConf "DB_PASSWORD" "db.password" (Right "") conf
+  dbPort <- getConf' "DB_PORT" "db.port" (Right 5432) conf
+  return ConnectInfo { connectPort = dbPort
+                     , connectHost = Text.unpack dbHost
+                     , connectUser = Text.unpack dbUser
+                     , connectDatabase = Text.unpack dbDatabase
+                     , connectPassword = Text.unpack dbPassword
+                     }
+
+{-# DEPRECATED withPoolNoWait "use getDBConnectionString to parse database connection info" #-}
+
 withPoolNoWait ::
      (MonadIO m, MonadUnliftIO m, MonadBaseControl IO m, MonadLogger m)
   => Config
@@ -89,27 +116,13 @@ withPoolNoWait ::
   -> (ConnectionPool -> m b)
   -> m b
 withPoolNoWait conf n f = do
-    dbHost <- getConf "DB_HOST" "db.host" (Right "database") conf
-    dbUser <- getConf "DB_USER" "db.user" (Right "postgres") conf
-    dbDatabase <- getConfMaybe "DB_DATABASE" "db.database" conf
-    dbPassword <- getConfMaybe "DB_PASSWORD" "db.password" conf
-    dbPort <- getConfMaybe "DB_PORT" "db.port" conf
-    let connectionString =
-          BS.intercalate " "
-          . catMaybes
-            $ [ "host"     ..= Just dbHost
-              , "user"     ..= Just dbUser
-              , "dbname"   ..= dbDatabase
-              , "password" ..= dbPassword
-              , "port"     ..= dbPort
-              ]
+    conInfo <- getDBConnectInfo conf
+    let connectionString = postgreSQLConnectionString conInfo
     $logDebug $ "Using connection string: \""
                 <> Text.decodeUtf8 connectionString <> "\""
     withPostgresqlPool connectionString n f
-  where
-    k ..= (Just v) = Just $ k <> "=" <> Text.encodeUtf8 v
-    _ ..= Nothing = Nothing
 
+{-# DEPRECATED withPool "use getDBConnectionString to parse database connection info" #-}
 withPool ::
      ( MonadIO m
      , MonadUnliftIO m
@@ -124,6 +137,18 @@ withPool ::
 withPool conf n f = withPoolNoWait conf n $ \pool -> do
   runPoolRetry pool (return ())
   f pool
+
+withDBPool :: (MonadLogger m, MonadUnliftIO m, Ex.MonadCatch m)
+           => ConnectInfo -- ^ Connection parameters
+           -> Int -- ^ Maximum number of open connections
+           -> ReaderT SqlBackend m () -- ^ Action to run before passing the pool
+                                      -- (e.g. migrations)
+           -> (ConnectionPool -> m a)
+           -> m a
+withDBPool conInfo cons migr f =
+  withPostgresqlPool (postgreSQLConnectionString conInfo) cons $ \pool -> do
+    runPoolRetry pool migr
+    f pool
 
 -- | Try to run a database action with a pool and retry until connection can be
 -- established
