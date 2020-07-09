@@ -14,10 +14,12 @@ dependencies:
   - aeson
   - bytestring
   - configurator
+  - containers
   - data-default
   - esqueleto
   - fast-logger
   - HUnit
+  - interpolate
   - lens
   - monad-control
   - monad-logger
@@ -43,6 +45,7 @@ library:
     - binary
     - case-insensitive >=1.2
     - exceptions >=0.8
+    - foldl
     - hspec
     - hspec-wai
     - hspec-wai-json
