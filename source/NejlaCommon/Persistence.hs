@@ -72,6 +72,9 @@ module NejlaCommon.Persistence
   , mbEq
   , offsetLimit
   -- * SQL helpers
+  , Postgres.ConnectInfo(..)
+  , Postgres.defaultConnectInfo
+  , Postgres.postgreSQLConnectionString
   , SV
   , SVM
   , jsonField
