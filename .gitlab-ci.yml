@@ -2,6 +2,8 @@ stages:
   - build
   # - test
 
+variables:
+  stack_args: --no-docker
 
 build:
   stage: build
