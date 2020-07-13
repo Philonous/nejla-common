@@ -1,0 +1,16 @@
+stages:
+  - build
+  # - test
+
+variables:
+  stack_args: --no-docker
+
+build:
+  stage: build
+  image: nejla/haskell-build
+  script:
+    - make
+  cache:
+    key: ${CI_JOB_NAME}
+    paths:
+      - .stack-work
