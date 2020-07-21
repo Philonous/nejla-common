@@ -39,6 +39,7 @@ library:
     - NejlaCommon.Helpers
     - NejlaCommon.Sendmail
     - NejlaCommon.Test
+    - NejlaCommon.Persistence.Migration
   dependencies:
     - base >=4.7 && <5.0
     - async
