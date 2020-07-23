@@ -1,0 +1,138 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.2.
+--
+-- see: https://github.com/sol/hpack
+
+name:           nejla-common
+version:        0.1.0.0
+synopsis:       Common functionality for Nejla Reference Architecture applications
+description:    Common functionality for Nejla Reference Architecture applications.
+category:       Development
+homepage:       https://github.com/nejla/nejla-common
+maintainer:     info@nejla.com
+copyright:      Nejla AB,
+                2014-2017
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+
+library
+  exposed-modules:
+      NejlaCommon
+      NejlaCommon.Config
+      NejlaCommon.Helpers
+      NejlaCommon.Sendmail
+      NejlaCommon.Test
+      NejlaCommon.Persistence.Migration
+  other-modules:
+      NejlaCommon.Logging
+      NejlaCommon.Persistence
+      NejlaCommon.Persistence.SqlStatistics
+      NejlaCommon.Persistence.Util
+      NejlaCommon.Wai
+      Paths_nejla_common
+  hs-source-dirs:
+      source
+  ghc-options: -Wall
+  build-depends:
+      HUnit
+    , aeson
+    , async
+    , base >=4.7 && <5.0
+    , binary
+    , bytestring
+    , case-insensitive >=1.2
+    , configurator
+    , containers
+    , data-default
+    , esqueleto
+    , exceptions >=0.8
+    , fast-logger
+    , foldl
+    , hspec
+    , hspec-wai
+    , hspec-wai-json
+    , http-api-data >=0.3.1
+    , http-types >=0.9
+    , interpolate
+    , lens
+    , microstache
+    , mime-mail
+    , monad-control
+    , monad-logger
+    , mtl >=2.2
+    , path-pieces
+    , persistent
+    , persistent-postgresql
+    , persistent-template
+    , postgresql-simple
+    , random
+    , random-shuffle
+    , resourcet
+    , singletons >=1.1
+    , template-haskell >=2.12
+    , text
+    , th-lift-instances
+    , time >=1.5
+    , transformers
+    , transformers-base
+    , unliftio-core
+    , unordered-containers
+    , uuid
+    , wai
+    , wai-extra
+  default-language: Haskell2010
+
+test-suite tests
+  type: exitcode-stdio-1.0
+  main-is: Test.hs
+  other-modules:
+      Config
+      Helpers
+      Logging
+      Logstash
+      Persistent
+      Persistent.Common
+      Persistent.Serializable
+      Paths_nejla_common
+  hs-source-dirs:
+      tests
+  ghc-options: -threaded
+  build-depends:
+      HUnit
+    , QuickCheck
+    , aeson
+    , async
+    , base
+    , bytestring
+    , configurator
+    , containers
+    , data-default
+    , esqueleto
+    , fast-logger
+    , formatting
+    , hspec-expectations
+    , interpolate
+    , lens
+    , monad-control
+    , monad-logger
+    , mtl
+    , nejla-common
+    , persistent
+    , persistent-postgresql
+    , persistent-template
+    , postgresql-simple
+    , shelly
+    , singletons
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
+    , tasty-th
+    , template-haskell
+    , temporary
+    , text
+    , time
+    , unliftio
+    , unordered-containers
+  default-language: Haskell2010
