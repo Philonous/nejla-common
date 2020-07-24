@@ -15,6 +15,12 @@ module NejlaCommon.Persistence.Migration
   , M
   , SchemaVersion
   , Migration(..)
+  -- * Helper functions
+  , schemaEmptyP
+  -- * Internal functions
+  , setupMetaSchema
+  , currentSchemaVersion
+  , registerMigration
   ) where
 
 import           Control.Monad.Logger
@@ -43,6 +49,8 @@ schemaEmptyP schema = do
     |] [P.PersistText schema] :: M [P.Single Text]
   return $ List.null res
 
+-- | Setup the metadata schema "_meta" and register an empty migration as a
+-- starting point
 setupMetaSchema :: M ()
 setupMetaSchema =
    schemaEmptyP "_meta" >>= \case
