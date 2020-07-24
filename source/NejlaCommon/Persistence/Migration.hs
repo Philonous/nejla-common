@@ -50,18 +50,17 @@ setupMetaSchema =
     True -> do
       $logInfo "Schema versioning not found. Initializing now."
       P.rawExecute $(sqlFile "source/NejlaCommon/Persistence/sql/initialize_versioning.sql") []
-      registerMigration "" Nothing "initial" "Initial setup"
     -- Schema versioning already installed
     False -> return ()
 
 -- | Query the current schema version
-currentSchemaVersion :: M (Maybe SchemaVersion)
+currentSchemaVersion :: M SchemaVersion
 currentSchemaVersion = do
   P.rawSql [sql|
                SELECT _meta.schema_version();
                |] [] >>= \case
-                  [Nothing] -> return Nothing
-                  [Just (P.Single i)] -> return $ Just i
+                  [Nothing] -> return ""
+                  [Just (P.Single i)] -> return i
                   _ -> error "currentSchemaVersion: wrong number of results"
 
 
@@ -127,13 +126,19 @@ runMigrations revision v (m@Migration{..}:ms) | v == expect = do
 -- Takes a list of migrations. Each migration should leave the schema in the
 -- version the next migration expects (that is, the @to@-field of migration @n@
 -- should match the @expect@-field of migration @n+1@)
+--
+-- The first time this function runs it sets up a metadata schema "_meta" that
+-- logs the migrations that have been run in the past. The initial schema
+-- version before any migrations are registered is the empty string "", so the
+-- first migration should expect this schema.
+
 migrate :: Text -- ^ Program revision (e.g. $(gitHash) from gitrev)
         -> [Migration]
         -> M ()
+migrate _ [] = do
+  $logError "List of migrations is empty, can't migrate"
+  liftIO exitFailure
 migrate revision migrations = do
   setupMetaSchema
-  currentSchemaVersion >>= \case
-    Nothing -> do
-      $logError "Couldn't find schema version"
-      liftIO exitFailure
-    Just v -> findMigration revision v migrations
+  sv <- currentSchemaVersion
+  findMigration revision sv migrations
