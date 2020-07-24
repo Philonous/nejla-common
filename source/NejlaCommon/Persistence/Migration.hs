@@ -19,6 +19,9 @@ module NejlaCommon.Persistence.Migration
   , schemaEmptyP
   -- ** Re-exports
   , gitHash
+  , P.rawExecute
+  , P.PersistValue(..)
+  , P.Single(..)
   -- * Internal functions
   , setupMetaSchema
   , currentSchemaVersion
