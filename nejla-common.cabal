@@ -50,6 +50,7 @@ library
     , exceptions >=0.8
     , fast-logger
     , foldl
+    , gitrev
     , hspec
     , hspec-wai
     , hspec-wai-json

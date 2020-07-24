@@ -17,6 +17,8 @@ module NejlaCommon.Persistence.Migration
   , Migration(..)
   -- * Helper functions
   , schemaEmptyP
+  -- ** Re-exports
+  , gitHash
   -- * Internal functions
   , setupMetaSchema
   , currentSchemaVersion
@@ -25,12 +27,13 @@ module NejlaCommon.Persistence.Migration
 
 import           Control.Monad.Logger
 import           Control.Monad.Reader
-import qualified Data.List            as List
-import           Data.Text            (Text)
-import qualified Database.Persist.Sql as P
-import           NejlaCommon.Persistence.Util     (sql, sqlFile)
+import qualified Data.List                    as List
+import           Data.Text                    (Text)
+import qualified Database.Persist.Sql         as P
+import           Development.GitRev
+import           NejlaCommon.Persistence.Util (sql, sqlFile)
 
-import           System.Exit          (exitFailure)
+import           System.Exit                  (exitFailure)
 
 type M a = ReaderT P.SqlBackend (LoggingT IO) a
 type SchemaVersion = Text
