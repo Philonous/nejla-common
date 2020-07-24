@@ -39,6 +39,7 @@ library:
     - NejlaCommon.Helpers
     - NejlaCommon.Sendmail
     - NejlaCommon.Test
+    - NejlaCommon.Persistence.Migration
   dependencies:
     - base >=4.7 && <5.0
     - async
@@ -46,6 +47,7 @@ library:
     - case-insensitive >=1.2
     - exceptions >=0.8
     - foldl
+    - gitrev
     - hspec
     - hspec-wai
     - hspec-wai-json
