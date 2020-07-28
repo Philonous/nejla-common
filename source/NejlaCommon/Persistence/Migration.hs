@@ -74,7 +74,8 @@ currentSchemaVersion = do
                SELECT _meta.schema_version();
                |] [] >>= \case
                   [Nothing] -> return ""
-                  [Just (P.Single i)] -> return i
+                  [Just (P.Single (P.PersistText i))] -> return i
+                  [Just (P.Single P.PersistNull)] -> return ""
                   _ -> error "currentSchemaVersion: wrong number of results"
 
 
