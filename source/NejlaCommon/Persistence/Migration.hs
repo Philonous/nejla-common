@@ -36,6 +36,7 @@ import qualified Database.Persist.Sql         as P
 import           Development.GitRev
 import           NejlaCommon.Persistence.Util (sql, sqlFile)
 
+import           Data.Maybe                   (fromMaybe)
 import           System.Exit                  (exitFailure)
 
 type M a = ReaderT P.SqlBackend (LoggingT IO) a
@@ -68,14 +69,14 @@ setupMetaSchema =
     False -> return ()
 
 -- | Query the current schema version
-currentSchemaVersion :: M SchemaVersion
+currentSchemaVersion :: M (Maybe SchemaVersion)
 currentSchemaVersion = do
   P.rawSql [sql|
                SELECT _meta.schema_version();
                |] [] >>= \case
-                  [Nothing] -> return ""
-                  [Just (P.Single (P.PersistText i))] -> return i
-                  [Just (P.Single P.PersistNull)] -> return ""
+                  [Nothing] -> return Nothing
+                  [Just (P.Single (P.PersistText i))] -> return (Just i)
+                  [Just (P.Single P.PersistNull)] -> return Nothing
                   _ -> error "currentSchemaVersion: wrong number of results"
 
 
@@ -100,13 +101,13 @@ runMigration :: Text -- ^ Program revision
              -> Migration
              -> M ()
 runMigration revision Migration{..} = do
-  $logInfo $ "Migrating database schema from " <> expect <> " to " <> to <> " ("
+  $logInfo $ "Migrating database schema from " <> fromMaybe "<None>" expect <> " to " <> to <> " ("
     <> description <> ")"
   script
-  registerMigration revision (Just expect) to description
+  registerMigration revision expect to description
 
-data Migration = Migration { expect :: SchemaVersion
-                           -- ^ Expected schema version before the migration
+data Migration = Migration { expect :: Maybe SchemaVersion
+                           -- ^ Expected schema version before the migration (Nothing if no migrations exist)
                            , to :: SchemaVersion
                            -- ^ Schema version after the migration
                            , description :: Text
@@ -114,25 +115,25 @@ data Migration = Migration { expect :: SchemaVersion
                            , script :: M ()
                            }
 
-findMigration :: Text ->SchemaVersion -> [Migration] -> M ()
-findMigration _r v [Migration{..}] | v == to =
+findMigration :: Text -> Maybe SchemaVersion -> [Migration] -> M ()
+findMigration _r (Just v) [Migration{..}] | v == to =
   $logInfo $ "Already in schema version " <> v <> "; nothing to do."
                                 -- Already in final schema version
 findMigration revision v ms@(Migration{..}:mss)
   | v == expect = runMigrations revision v ms
   | otherwise = findMigration revision v mss
 findMigration _r v _ = do
-  $logError $ "Unknown schema version " <> v
+  $logError $ "Unknown schema version " <> (fromMaybe "<None>" v)
   liftIO exitFailure
 
-runMigrations :: Text -> SchemaVersion -> [Migration] -> M ()
+runMigrations :: Text -> Maybe SchemaVersion -> [Migration] -> M ()
 runMigrations _ v [] = do
-  $logInfo $ "Finished migrations. Final schema: " <> v
+  $logInfo $ "Finished migrations. Final schema: " <> fromMaybe "<None>" v
   return ()
 runMigrations revision v (m@Migration{..}:ms) | v == expect = do
-  runMigration revision m >> runMigrations revision to ms
+  runMigration revision m >> runMigrations revision (Just to) ms
                                               | otherwise = do
-  $logError $ "runMigrations: Unknown schema version " <> v
+  $logError $ "runMigrations: Unknown schema version " <> fromMaybe "<None>" v
   liftIO exitFailure
 
 -- | Finds the current schema version and runs all migrations linearly starting
