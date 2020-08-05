@@ -22,149 +22,28 @@ module NejlaCommon ( module NejlaCommon.Wai
                    , derivedType
                    , formatUTC
                    , parseUTC
-                   , withPool
-                   , withDBPool
-                   , runPoolRetry
-                   , getDBConnectInfo
                    ) where
 
 import           Control.Applicative
-import           Control.Concurrent
 import           Control.Monad
-import qualified Control.Monad.Catch         as Ex
-import           Control.Monad.IO.Unlift     (MonadUnliftIO)
-import           Control.Monad.Logger
-import           Control.Monad.Reader        (ReaderT)
-import           Control.Monad.Trans         hiding (lift)
-import           Control.Monad.Trans.Control
 import           Data.Aeson
 import           Data.Data
 import           Data.Default
 import           Data.Maybe
-import qualified Data.Text                   as Text
-import qualified Data.Text.Encoding          as Text
 import           Data.Time.Clock
 import           Data.Time.Format
-import qualified Data.UUID                   as UUID
-import           Database.Persist.Postgresql
 import           GHC.Generics                (Generic)
 import           GHC.TypeLits
 import           Language.Haskell.TH         as TH
-import           Web.PathPieces
 
-import qualified Data.ByteString             as BS
 import qualified Data.HashMap.Strict         as HMap
 import qualified Data.List                   as L
 import qualified Data.Text                   as TS
 
-import           NejlaCommon.Config
 import           NejlaCommon.Helpers
 import           NejlaCommon.Persistence
 import           NejlaCommon.Logging
 import           NejlaCommon.Wai
-
-
-instance PersistField UUID.UUID where
-    toPersistValue = toPersistValue . UUID.toString
-    fromPersistValue x = case x of
-        PersistDbSpecific bs ->
-            case UUID.fromASCIIBytes bs of
-             Nothing -> Left $ "Invalid UUID: " <> TS.pack (show bs)
-             Just u -> Right u
-        PersistText txt ->
-            case UUID.fromString $ TS.unpack txt of
-             Nothing -> Left $ "Invalid UUID: " <> TS.pack (show txt)
-             Just u -> Right u
-        e -> Left $ "Can not convert to uuid: " <> TS.pack (show e)
-
-instance PersistFieldSql UUID.UUID where
-    sqlType _ = SqlOther "uuid"
-
-instance PathPiece UUID.UUID where
-    fromPathPiece = UUID.fromString . TS.unpack
-    toPathPiece = TS.pack . UUID.toString
-
--- | Parse database connection info from configuration file or environment
--- variables. The relevant variables are
---
--- * DB_HOST / db.host (default = "localhost")
--- * DB_PORT / db.port (default = 5432)
--- * DB_USER / db.user  (default = "postgres")
--- * DB_PASSWORD / db.password (default = "")
--- * DB_DATABASE / db.database (default = "postgres")
-
-getDBConnectInfo :: (MonadLogger m, MonadIO m) => Config -> m ConnectInfo
-getDBConnectInfo conf = do
-  dbHost <- getConf "DB_HOST" "db.host" (Right "localhost") conf
-  dbUser <- getConf "DB_USER" "db.user" (Right "postgres") conf
-  dbDatabase <- getConf "DB_DATABASE" "db.database" (Right "postgres") conf
-  dbPassword <- getConf "DB_PASSWORD" "db.password" (Right "") conf
-  dbPort <- getConf' "DB_PORT" "db.port" (Right 5432) conf
-  return ConnectInfo { connectPort = dbPort
-                     , connectHost = Text.unpack dbHost
-                     , connectUser = Text.unpack dbUser
-                     , connectDatabase = Text.unpack dbDatabase
-                     , connectPassword = Text.unpack dbPassword
-                     }
-
-{-# DEPRECATED withPoolNoWait "use getDBConnectionString to parse database connection info" #-}
-
-withPoolNoWait ::
-     (MonadIO m, MonadUnliftIO m, MonadBaseControl IO m, MonadLogger m)
-  => Config
-  -> Int
-  -> (ConnectionPool -> m b)
-  -> m b
-withPoolNoWait conf n f = do
-    conInfo <- getDBConnectInfo conf
-    let connectionString = postgreSQLConnectionString conInfo
-    $logDebug $ "Using connection string: \""
-                <> Text.decodeUtf8 connectionString <> "\""
-    withPostgresqlPool connectionString n f
-
-{-# DEPRECATED withPool "use getDBConnectionString to parse database connection info" #-}
-withPool ::
-     ( MonadIO m
-     , MonadUnliftIO m
-     , MonadBaseControl IO m
-     , MonadLogger m
-     , Ex.MonadCatch m
-     )
-  => Config
-  -> Int
-  -> (ConnectionPool -> m b)
-  -> m b
-withPool conf n f = withPoolNoWait conf n $ \pool -> do
-  runPoolRetry pool (return ())
-  f pool
-
-withDBPool :: (MonadLogger m, MonadUnliftIO m, Ex.MonadCatch m)
-           => ConnectInfo -- ^ Connection parameters
-           -> Int -- ^ Maximum number of open connections
-           -> ReaderT SqlBackend m () -- ^ Action to run before passing the pool
-                                      -- (e.g. migrations)
-           -> (ConnectionPool -> m a)
-           -> m a
-withDBPool conInfo cons migr f =
-  withPostgresqlPool (postgreSQLConnectionString conInfo) cons $ \pool -> do
-    runPoolRetry pool migr
-    f pool
-
--- | Try to run a database action with a pool and retry until connection can be
--- established
-runPoolRetry ::
-     (MonadIO m, MonadUnliftIO m, Ex.MonadCatch m, MonadLogger m)
-  => ConnectionPool
-  -> ReaderT SqlBackend m a
-  -> m a
-runPoolRetry pool f =
-    Ex.catchIOError (runSqlPool f pool) $ \e -> do
-    liftIO $ threadDelay 1000000
-    $logWarn $
-      "Could not connect to database, retrying ( " <>
-      (Text.pack . show . show $ e) <>
-      ")"
-    runPoolRetry pool f
 
 -- | See 'derivedType'.
 data DerivedData = DD { derivedPrefix :: String
