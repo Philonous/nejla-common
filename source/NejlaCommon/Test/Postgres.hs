@@ -4,7 +4,12 @@
 
 -- | Helpers to deal with Postgres in test suites
 
-module NejlaCommon.Test.Postgres where
+module NejlaCommon.Test.Postgres
+  ( module NejlaCommon.Test.Postgres
+  , ConnectInfo(..)
+  )
+
+where
 
 import qualified Control.Monad.Catch               as Ex
 import           Control.Monad.Logger
@@ -12,9 +17,11 @@ import           Control.Monad.Reader
 import           Data.ByteString                   (ByteString)
 import qualified Data.ByteString.Char8             as BS
 import           Database.Persist.Sql              (SqlBackend, ConnectionPool)
+import qualified Database.PostgreSQL.Simple        as Postgres
 import           NejlaCommon.Persistence
 import           NejlaCommon.Persistence.Migration
 import           Network.Wai                       (Application)
+import           System.Environment                (lookupEnv)
 import           System.IO                         (stderr)
 import           Test.Hspec                  ( Example(..), SpecWith
                                              , beforeWith, aroundWith
@@ -24,6 +31,7 @@ import           Test.Hspec                  ( Example(..), SpecWith
 import qualified Database.Persist.Sql              as P
 
 import           NejlaCommon.Test.Logging          (loggingToChan)
+
 
 type Migrate = ReaderT SqlBackend (LoggingT IO) ()
 
@@ -137,3 +145,40 @@ specApi ci migration withMkApp spec =
 
                 )
      spec
+
+-- | Read database connection info from environment variables, reverting to
+-- defaults if unset.
+--
+-- Recognized variables (default):
+-- DB_HOST     ("localhost")
+-- DB_USER     ("postgres")
+-- DB_DATABASE ("postgres")
+-- DB_PASSWORD ("")
+-- DB_PORT     (5432)
+dbTestConnectInfo :: IO ConnectInfo
+dbTestConnectInfo = do
+  dbHost <- getEnv "DB_HOST" "localhost"
+  dbUser <- getEnv "DB_USER" "postgres"
+  dbDatabase <- getEnv "DB_DATABASE" "postgres"
+  dbPassword <- getEnv "DB_PASSWORD" ""
+  dbPort <- getEnv' "DB_PORT" 5432
+  return Postgres.ConnectInfo { Postgres.connectPort = dbPort
+                              , Postgres.connectHost = dbHost
+                              , Postgres.connectUser = dbUser
+                              , Postgres.connectDatabase = dbDatabase
+                              , Postgres.connectPassword = dbPassword
+                              }
+  where
+    getEnv name def = do
+      mbE <- lookupEnv name
+      return $ case mbE of
+                 Nothing -> def
+                 Just e -> e
+    getEnv' name def = do
+      mbE <- lookupEnv name
+      case mbE of
+        Nothing -> return def
+        Just r -> case reads r of
+                    [(e,_)] -> return e
+                    _ -> error $ "Could not read " <> name
+                                  <> ", value" <> show r <> " not understood"

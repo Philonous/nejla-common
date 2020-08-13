@@ -39,6 +39,8 @@ library:
     - NejlaCommon.Helpers
     - NejlaCommon.Sendmail
     - NejlaCommon.Test
+    - NejlaCommon.Test.Postgres
+    - NejlaCommon.Test.Logging
     - NejlaCommon.Persistence.Migration
   dependencies:
     - base >=4.7 && <5.0

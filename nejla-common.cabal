@@ -24,14 +24,14 @@ library
       NejlaCommon.Helpers
       NejlaCommon.Sendmail
       NejlaCommon.Test
+      NejlaCommon.Test.Postgres
+      NejlaCommon.Test.Logging
       NejlaCommon.Persistence.Migration
   other-modules:
       NejlaCommon.Logging
       NejlaCommon.Persistence
       NejlaCommon.Persistence.SqlStatistics
       NejlaCommon.Persistence.Util
-      NejlaCommon.Test.Logging
-      NejlaCommon.Test.Postgres
       NejlaCommon.Wai
       Paths_nejla_common
   hs-source-dirs:
