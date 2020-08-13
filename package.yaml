@@ -61,6 +61,8 @@ library:
     - random-shuffle
     - resourcet
     - singletons >=1.1
+    - stm
+    - stm-chans
     - template-haskell >=2.12
     - th-lift-instances
     - time >=1.5

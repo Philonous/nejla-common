@@ -30,6 +30,8 @@ library
       NejlaCommon.Persistence
       NejlaCommon.Persistence.SqlStatistics
       NejlaCommon.Persistence.Util
+      NejlaCommon.Test.Logging
+      NejlaCommon.Test.Postgres
       NejlaCommon.Wai
       Paths_nejla_common
   hs-source-dirs:
@@ -72,6 +74,8 @@ library
     , random-shuffle
     , resourcet
     , singletons >=1.1
+    , stm
+    , stm-chans
     , template-haskell >=2.12
     , text
     , th-lift-instances
