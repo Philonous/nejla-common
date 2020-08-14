@@ -118,15 +118,17 @@ cleanDB = P.rawExecute cleanDBSql []
          RESET client_min_messages;
         |]
 
-type DBApiSpec  = SpecWith Application
+type DBApiSpec st = SpecWith (st, Application)
 
 -- | Hspec helper. Sets up a database connection via withTestDB, clearing out the database before every test
+--
+-- The callback function will be called on each test. It's passed the connection pool
 specApi :: ConnectInfo -- ^ Database connection info
         -> Migrate -- ^ Migration script to run once
         -> (ConnectionPool
-             -> ((Application -> IO ()) -> LoggingT IO ()))
+             -> ((st -> Application -> IO ()) -> LoggingT IO ()))
           -- ^ Setup and teardown of Application around each test
-        -> DBApiSpec -- ^ Tests to run
+        -> DBApiSpec st -- ^ Tests to run
         -> IO ()
 specApi ci migration withMkApp spec =
   loggingToChan 20 $ \getLogs -> do
@@ -136,7 +138,7 @@ specApi ci migration withMkApp spec =
       -- Drain logs so we don't get logs from previous tests
       _ <- liftIO $ getLogs
       P.runSqlPool cleanDB pool
-      Ex.catch (withMkApp pool s) $ \(_ :: Ex.SomeException) -> do
+      Ex.catch (withMkApp pool $ curry s) $ \(_ :: Ex.SomeException) -> do
         liftIO (mapM_ (BS.hPutStrLn stderr) =<< getLogs)
 
 
