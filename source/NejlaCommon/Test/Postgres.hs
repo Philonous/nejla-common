@@ -138,10 +138,8 @@ specApi ci migration withMkApp spec =
       -- Drain logs so we don't get logs from previous tests
       _ <- liftIO $ getLogs
       P.runSqlPool cleanDB pool
-      Ex.catch (withMkApp pool $ curry s) $ \(_ :: Ex.SomeException) -> do
+      Ex.onException (withMkApp pool $ curry s) $ do
         liftIO (mapM_ (BS.hPutStrLn stderr) =<< getLogs)
-
-
       return ()
                                               ) logFun
 
