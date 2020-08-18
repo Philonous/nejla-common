@@ -27,6 +27,7 @@ library
       NejlaCommon.Test.Postgres
       NejlaCommon.Test.Json
       NejlaCommon.Test.Logging
+      NejlaCommon.Test.Expectation
       NejlaCommon.Persistence.Migration
   other-modules:
       NejlaCommon.Logging

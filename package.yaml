@@ -42,6 +42,7 @@ library:
     - NejlaCommon.Test.Postgres
     - NejlaCommon.Test.Json
     - NejlaCommon.Test.Logging
+    - NejlaCommon.Test.Expectation
     - NejlaCommon.Persistence.Migration
   dependencies:
     - base >=4.7 && <5.0
