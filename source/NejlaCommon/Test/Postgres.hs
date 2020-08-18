@@ -5,8 +5,14 @@
 -- | Helpers to deal with Postgres in test suites
 
 module NejlaCommon.Test.Postgres
-  ( module NejlaCommon.Test.Postgres
+  ( Migrate
+  , withTestDB
+  , cleanDB
+  , DBApiSpec
+  , TestDone -- Don't except constructor
+  , specApi
   , ConnectInfo(..)
+  , dbTestConnectInfo
   )
 
 where
@@ -118,15 +124,32 @@ cleanDB = P.rawExecute cleanDBSql []
          RESET client_min_messages;
         |]
 
-type DBApiSpec st = SpecWith (st, Application)
+type DBApiSpec st = SpecWith ((ConnectionPool, st), Application)
 
--- | Hspec helper. Sets up a database connection via withTestDB, clearing out the database before every test
+-- | Dummy type to ensure that passed test is run
+data TestDone = TestDone
+
+-- | Hspec helper. Sets up a database connection via withTestDB, clearing out
+-- the database before every test
 --
--- The callback function will be called on each test. It's passed the connection pool
+-- The callback function is run around every test. It's given the live database
+-- pool (already migrated and cleaned) and a continuation it should be
+-- running. The slightly complicated type is so that it can perform setup and
+-- teardown of additional resources. Note that the continuation might throw
+-- exceptions, so resource management should be done with bracket.
+--
+-- Example: Say we want to create a temporary directory for each test and clean it up afterwards, then we would write:
+--
+-- > withTest _pool runTest = do
+-- >   withSystemTempDirectory "example" $ \path ->
+-- >     liftIO $ runTest path (mkApp path)
+-- >
+-- > specApi connInfo migrate withTest spec
 specApi :: ConnectInfo -- ^ Database connection info
         -> Migrate -- ^ Migration script to run once
         -> (ConnectionPool
-             -> ((st -> Application -> IO ()) -> LoggingT IO ()))
+             -> (st -> Application -> IO TestDone)
+             -> LoggingT IO TestDone)
           -- ^ Setup and teardown of Application around each test
         -> DBApiSpec st -- ^ Tests to run
         -> IO ()
@@ -135,10 +158,11 @@ specApi ci migration withMkApp spec =
   logFun <- askLoggerIO
   withTestDB ci 5 migration $ \pool ->
     hspec $ aroundWith ( \s () -> runLoggingT (do
+      let s' st app = s ((pool, st), app) >> return TestDone
       -- Drain logs so we don't get logs from previous tests
       _ <- liftIO $ getLogs
       P.runSqlPool cleanDB pool
-      Ex.onException (withMkApp pool $ curry s) $ do
+      Ex.onException (withMkApp pool s') $ do
         liftIO (mapM_ (BS.hPutStrLn stderr) =<< getLogs)
       return ()
                                               ) logFun
