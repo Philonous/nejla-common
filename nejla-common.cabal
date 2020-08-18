@@ -25,6 +25,7 @@ library
       NejlaCommon.Sendmail
       NejlaCommon.Test
       NejlaCommon.Test.Postgres
+      NejlaCommon.Test.Json
       NejlaCommon.Test.Logging
       NejlaCommon.Persistence.Migration
   other-modules:
