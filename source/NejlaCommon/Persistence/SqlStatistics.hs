@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -19,12 +20,12 @@
 
 module NejlaCommon.Persistence.SqlStatistics where
 
-import qualified Control.Exception                as Ex
 import qualified Control.Foldl                    as Foldl
 import           Control.Lens
 import           Control.Monad
+import qualified Control.Monad.Catch              as Ex
 import           Control.Monad.Logger             as Log
-import           Control.Monad.Trans
+import           Control.Monad.Reader
 import qualified Data.Aeson                       as Aeson
 import           Data.IORef
 import qualified Data.List                        as List
@@ -65,14 +66,20 @@ type StatsFold stats = Foldl.Fold QueryTime stats
 -- execution time or something more complex like averages and standard
 -- deviations.
 --
+-- The callback is passed an IO action that reads the statistics so they can be
+-- used in an exception handler. this also allows fetching of intermediate
+-- statistics
+--
 -- /NB/ the backend is /modified/ before the callback function is run and the
 -- modifications are undone one the functions returns. This means that using the
 -- Backend concurrently can have unintended side effects.
 backendWithStats ::
   MonadIO m => StatsFold stats -- ^ Fold describes how to calculate statistics. See for example 'foldStats'
             -> P.SqlBackend -- ^ Backend to hook into
-            -> (P.SqlBackend -> m a) -- ^ What to do with the hooked backend
-            -> m (stats, a)
+            -> (IO stats
+                -> P.SqlBackend
+                -> m a) -- ^ Callback (what to do with the hooked backend)
+            -> m a
 backendWithStats (Foldl.Fold fadd fempty fextract) con k = do
   statsRef <- liftIO $ newIORef fempty
   let update x = atomicModifyIORef statsRef $ \stats -> (fadd stats x, ())
@@ -90,16 +97,16 @@ backendWithStats (Foldl.Fold fadd fempty fextract) con k = do
         -- Hook into the execute and query calls to register statistics
         return $ hookedStatement update statementText stmt
 
-  -- Call inner function with hooked statement map
-  res <- k con{ P.connPrepare = prepare }
+  let readStats = fextract <$> readIORef statsRef
+  -- Call inner function with the read function and the hooked statement map
+  res <- k readStats con{ P.connPrepare = prepare }
 
   -- Reinstate unhooked statements
   liftIO $ writeIORef (P.connStmtMap con) =<< readIORef unhookedStatements
   -- We don't need bracket because exceptions during statement execution
   -- invalidate the connection anyway
 
-  stats <- liftIO $  fextract <$> readIORef statsRef
-  return (stats, res)
+  return res
   where
     -- | Execute action f while registering the query and the execution time
     withStats :: MonadIO m =>
@@ -155,10 +162,10 @@ foldStats  = Foldl.groupBy (view query) . lmap (view time) $ do
 -- | Logging the calculated statistics
 logQueryStats :: (MonadIO m, MonadLogger m)
               => Text -- ^ Endpoint
-              -> (Map Text Stats)
               -> Bool -- Break down stats by query
+              -> (Map Text Stats)
               -> m ()
-logQueryStats endpoint stats breakdown = do
+logQueryStats endpoint breakdown stats = do
   now <- liftIO $ getCurrentTime
   let tCount = sumOf (each . count) stats
       tUnique = Map.size stats
@@ -179,3 +186,15 @@ logQueryStats endpoint stats breakdown = do
   where
     tDiff :: RealFrac a => a -> String
     tDiff d = printf "%.3f" (realToFrac d :: Double)
+
+-- | One-stop shop for just getting some statistics.
+-- Hook the SQL backend, collect count, sum and maximum execution time and log them
+logSqlStatistics :: Text -- ^ Context to log (e.g. the request endpoint)
+                 -> App priv tl st a
+                 -> App priv tl st a
+logSqlStatistics ctx (NC.App m) = do
+  st <- NC.App $ ask
+  backendWithStats foldStats (st ^. NC.connection) (\getStats con ->
+    (NC.App $ ReaderT $ \_ -> runReaderT m (st & NC.connection .~ con))
+    `Ex.finally` ( logQueryStats ctx True =<< liftIO getStats)
+                                                   )

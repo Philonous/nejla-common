@@ -311,7 +311,7 @@ makeLensesWith camelCaseFields ''SqlConfig
 defaultSqlConfig :: SqlConfig
 defaultSqlConfig = SqlConfig { sqlConfigNumRetries = 3
                              , sqlConfigRetryMinDelay = 0 -- 0 ms
-                             , sqlConfigRetryMaxDelay = 100000 -- 0 ms
+                             , sqlConfigRetryMaxDelay = 100000 -- 100 ms
                              , sqlConfigRetryableErrors
                                =  [ "40001" -- serialization_failure
                                   , "40P01" -- deadlock_detected
