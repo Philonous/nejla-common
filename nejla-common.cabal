@@ -29,10 +29,10 @@ library
       NejlaCommon.Test.Logging
       NejlaCommon.Test.Expectation
       NejlaCommon.Persistence.Migration
+      NejlaCommon.Persistence.SqlStatistics
   other-modules:
       NejlaCommon.Logging
       NejlaCommon.Persistence
-      NejlaCommon.Persistence.SqlStatistics
       NejlaCommon.Persistence.Util
       NejlaCommon.Wai
       Paths_nejla_common

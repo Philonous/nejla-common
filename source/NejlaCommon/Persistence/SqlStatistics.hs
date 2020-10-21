@@ -8,6 +8,15 @@
 {-# LANGUAGE ApplicativeDo #-}
 
 -- | Collect statistics of executed SQL queries.
+--
+-- It is important to know which SQL queries where executed and how long they
+-- took individually and in aggregate. This module provides a way to /hook/ into
+-- persistent backends and record the time each query took.
+--
+-- To get started, you can just wrap your 'App' actions with 'logSqlStats'. It
+-- will hook the SQL backend, collect the query statistics and log them, e.g. like so:
+-- > App.run pool conf ctx (logSqlStatistics m)
+
 module NejlaCommon.Persistence.SqlStatistics where
 
 import qualified Control.Exception                as Ex
@@ -34,14 +43,8 @@ import qualified NejlaCommon.Persistence          as NC
 import           NejlaCommon.Persistence          (App(..))
 
 
-data Stats = Stats
-  { statsCount :: Int -- ^ Number of times this statement is executed
-  , statsTotalTime :: Time.NominalDiffTime -- ^ Total duration spent in this query
-  , statsMaxTime :: Time.NominalDiffTime -- ^ Longest run of this query
-  }
 
-makeLensesWith camelCaseFields ''Stats
-
+-- | Individual sample of a query and its execution time.
 data QueryTime = QueryTime
   { queryTimeQuery :: Text
   , queryTimeTime  :: Time.NominalDiffTime
@@ -49,53 +52,26 @@ data QueryTime = QueryTime
 makeLensesWith camelCaseFields ''QueryTime
 
 -- | How to fold a sequence of Query Timings into desired statistics
+--
+-- (See https://www.youtube.com/watch?v=6a5Ti0r8Q2s for an introduction to Foldl)
 type StatsFold stats = Foldl.Fold QueryTime stats
-
--- | Default / example fold how to calculate statistics from individual query
--- execution times
-foldStats :: StatsFold (Map Text Stats)
-foldStats  = Foldl.groupBy (view query) . lmap (view time) $ do
-  count <- Foldl.length
-  total <- Foldl.sum
-  max <- fromMaybe 0 <$> Foldl.maximum
-  return $ Stats { statsCount = count
-                 , statsTotalTime = total
-                 , statsMaxTime = max
-                 }
-
-logQueryStats :: (MonadIO m, MonadLogger m)
-              => Text -- ^ Endpoint
-              -> (Map Text Stats)
-              -> Bool -- Break down stats by query
-              -> m ()
-logQueryStats endpoint stats breakdown = do
-  now <- liftIO $ getCurrentTime
-  let tCount = sumOf (each . count) stats
-      tUnique = Map.size stats
-      tTime = sumOf (each . totalTime) stats
-      tTimePerQuery = if tCount > 0
-                      then tTime / (fromIntegral tCount)
-                      else  0
-      tLongestQuery = fromMaybe 0 $ maximumOf (each . maxTime) stats
-  when breakdown $ do
-    let queries = List.sortBy (comparing $ view (_2 . totalTime))
-                    $ Map.toList stats
-
-    forM_ (queries) $ \(query, stat) -> do
-      Log.logDebugNS "SQL-stats" $ "  > " <> query
-      Log.logDebugNS "SQL-stats" [i| Ran #{stat ^. count} times, total=#{stat ^. totalTime}, max=#{stat ^. maxTime})|]
-  Log.logInfoNS "SQL-stats" [i|{"request":#{Aeson.encode endpoint}, "timestamp": #{Aeson.encode now}, "queries":#{tCount}, "unique":#{tUnique}, "totalTime":#{tDiff tTime}, "avgTime":#{tDiff tTimePerQuery}, "maxTime":#{tDiff tLongestQuery}}|]
-  return ()
-  where
-    tDiff :: RealFrac a => a -> String
-    tDiff d = printf "%.3f" (realToFrac d :: Double)
 
 -- | Add hooks to an SqlBackend to collect query execution statistics, remove
 -- hooks once the function returns
+--
+-- You provide it with a Fold (aka reducer), i.e. a function that calculates the
+-- aggregate statistics you are interested in from the individual samples. For
+-- example, you might want to know how often a particular query ran, its maximum
+-- execution time or something more complex like averages and standard
+-- deviations.
+--
+-- /NB/ the backend is /modified/ before the callback function is run and the
+-- modifications are undone one the functions returns. This means that using the
+-- Backend concurrently can have unintended side effects.
 backendWithStats ::
-  MonadIO m => StatsFold stats -- ^ Fold describes how to calculate statistics
-            -> P.SqlBackend
-            -> (P.SqlBackend -> m a)
+  MonadIO m => StatsFold stats -- ^ Fold describes how to calculate statistics. See for example 'foldStats'
+            -> P.SqlBackend -- ^ Backend to hook into
+            -> (P.SqlBackend -> m a) -- ^ What to do with the hooked backend
             -> m (stats, a)
 backendWithStats (Foldl.Fold fadd fempty fextract) con k = do
   statsRef <- liftIO $ newIORef fempty
@@ -147,3 +123,59 @@ backendWithStats (Foldl.Fold fadd fempty fextract) con k = do
           , P.stmtQuery = \values -> do
               withStats addSample statementText (P.stmtQuery stmt values)
           }
+
+--------------------------------------------------------------------------------
+-- Default Statistics ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+-- | Query statistics. Knowing how often a query ran, the total executation time
+-- and the longest run gives us enough information to debug many performance
+-- problems.
+data Stats = Stats
+  { statsCount :: Int -- ^ Number of times this statement was executed
+  , statsTotalTime :: Time.NominalDiffTime -- ^ Total duration spent in this query
+  , statsMaxTime :: Time.NominalDiffTime -- ^ Longest run of this query
+  }
+
+makeLensesWith camelCaseFields ''Stats
+
+-- | Default / example fold how to calculate statistics from individual query
+-- execution times. Collects for each executed query (as Text) the runtime statistics
+foldStats :: StatsFold (Map Text Stats)
+foldStats  = Foldl.groupBy (view query) . lmap (view time) $ do
+  -- Make use of Foldl's Applicative instance.
+  count <- Foldl.length
+  total <- Foldl.sum
+  max <- fromMaybe 0 <$> Foldl.maximum
+  return $ Stats { statsCount = count
+                 , statsTotalTime = total
+                 , statsMaxTime = max
+                 }
+
+-- | Logging the calculated statistics
+logQueryStats :: (MonadIO m, MonadLogger m)
+              => Text -- ^ Endpoint
+              -> (Map Text Stats)
+              -> Bool -- Break down stats by query
+              -> m ()
+logQueryStats endpoint stats breakdown = do
+  now <- liftIO $ getCurrentTime
+  let tCount = sumOf (each . count) stats
+      tUnique = Map.size stats
+      tTime = sumOf (each . totalTime) stats
+      tTimePerQuery = if tCount > 0
+                      then tTime / (fromIntegral tCount)
+                      else  0
+      tLongestQuery = fromMaybe 0 $ maximumOf (each . maxTime) stats
+  when breakdown $ do
+    let queries = List.sortBy (comparing $ view (_2 . totalTime))
+                    $ Map.toList stats
+
+    forM_ (queries) $ \(query, stat) -> do
+      Log.logDebugNS "SQL-stats" $ "  > " <> query
+      Log.logDebugNS "SQL-stats" [i| Ran #{stat ^. count} times, total=#{stat ^. totalTime}, max=#{stat ^. maxTime})|]
+  Log.logInfoNS "SQL-stats" [i|{"request":#{Aeson.encode endpoint}, "timestamp": #{Aeson.encode now}, "queries":#{tCount}, "unique":#{tUnique}, "totalTime":#{tDiff tTime}, "avgTime":#{tDiff tTimePerQuery}, "maxTime":#{tDiff tLongestQuery}}|]
+  return ()
+  where
+    tDiff :: RealFrac a => a -> String
+    tDiff d = printf "%.3f" (realToFrac d :: Double)
