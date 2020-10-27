@@ -37,6 +37,7 @@ import           Test.Hspec                  ( Example(..), SpecWith
 import qualified Database.Persist.Sql              as P
 
 import           NejlaCommon.Test.Logging          (loggingToChan)
+import           Control.Monad.IO.Unlift           (MonadUnliftIO)
 
 
 type Migrate = ReaderT SqlBackend (LoggingT IO) ()
@@ -54,19 +55,21 @@ type Migrate = ReaderT SqlBackend (LoggingT IO) ()
 -- >  conInfo <- getDBConnectInfo conf
 -- >  withTestDB conInfo 3 (mapM_ script migrations) $ \pool -> do
 -- >     «run tests...»
-withTestDB :: ConnectInfo
+withTestDB :: (MonadUnliftIO m, Ex.MonadCatch m, MonadLogger m)
+           => ConnectInfo
            -> Int -- ^ Maximum number of connections in the pool
            -> Migrate -- ^ Migration to run once after connection is established
-           -> (ConnectionPool -> IO a) -> LoggingT IO a
+           -> (ConnectionPool -> m a)
+           -> m a
 withTestDB ci cs doMigrate f =
-  withDBPool ci cs doMigrate $ \pool -> do
-    liftIO $ do
-      _ <- runLoggingT (runPoolRetry pool dbSetup) (\_ _ _ _ -> return ())
-      f pool
+  withDBPool ci cs dbSetup $ \pool -> f pool
   where
+    -- dbSetup :: (MonadIO m, MonadLogger m) => ReaderT SqlBackend m ()
     dbSetup = do
+      logger <- askLoggerIO
       resetDB
-      doMigrate
+      ReaderT $ \backend ->
+        liftIO $ runLoggingT (runReaderT doMigrate backend) logger
       makeConstraintsDeferrable
     resetDB = P.rawExecute
       [sql|
