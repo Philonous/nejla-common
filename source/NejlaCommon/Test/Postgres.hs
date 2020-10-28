@@ -20,7 +20,6 @@ where
 import qualified Control.Monad.Catch               as Ex
 import           Control.Monad.Logger
 import           Control.Monad.Reader
-import           Data.ByteString                   (ByteString)
 import qualified Data.ByteString.Char8             as BS
 import           Database.Persist.Sql              (SqlBackend, ConnectionPool)
 import qualified Database.PostgreSQL.Simple        as Postgres
@@ -55,16 +54,16 @@ type Migrate = ReaderT SqlBackend (LoggingT IO) ()
 -- >  conInfo <- getDBConnectInfo conf
 -- >  withTestDB conInfo 3 (mapM_ script migrations) $ \pool -> do
 -- >     «run tests...»
-withTestDB :: (MonadUnliftIO m, Ex.MonadCatch m, MonadLogger m)
-           => ConnectInfo
+withTestDB :: ConnectInfo
            -> Int -- ^ Maximum number of connections in the pool
            -> Migrate -- ^ Migration to run once after connection is established
-           -> (ConnectionPool -> m a)
-           -> m a
+           -> (ConnectionPool -> LoggingT IO a)
+           -> LoggingT IO a
 withTestDB ci cs doMigrate f =
   withDBPool ci cs dbSetup $ \pool -> f pool
   where
     -- dbSetup :: (MonadIO m, MonadLogger m) => ReaderT SqlBackend m ()
+    dbSetup :: ReaderT SqlBackend (LoggingT IO) ()
     dbSetup = do
       logger <- askLoggerIO
       resetDB
@@ -160,7 +159,7 @@ specApi ci migration withMkApp spec =
   loggingToChan 20 $ \getLogs -> do
   logFun <- askLoggerIO
   withTestDB ci 5 migration $ \pool ->
-    hspec $ aroundWith ( \s () -> runLoggingT (do
+    lift . hspec $ aroundWith ( \s () -> runLoggingT (do
       let s' st app = s ((pool, st), app) >> return TestDone
       -- Drain logs so we don't get logs from previous tests
       _ <- liftIO $ getLogs
