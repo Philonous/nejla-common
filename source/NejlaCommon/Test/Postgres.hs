@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -35,11 +36,14 @@ import           Test.Hspec                  ( Example(..), SpecWith
 
 import qualified Database.Persist.Sql              as P
 
-import           NejlaCommon.Test.Logging          (loggingToChan)
 import           Control.Monad.IO.Unlift           (MonadUnliftIO)
+import           Control.Monad.Trans.Control       (MonadBaseControl(..))
+import           NejlaCommon.Test.Logging          (loggingToChan)
+
+import qualified NejlaCommon.Persistence.Migration as Migration
 
 
-type Migrate = ReaderT SqlBackend (LoggingT IO) ()
+type Migrate = Migration.M ()
 
 -- | Set up a connection to the testing database. Re-tries connecting to the
 -- database and once successful cleans it out and runs the migration. It will
@@ -54,21 +58,19 @@ type Migrate = ReaderT SqlBackend (LoggingT IO) ()
 -- >  conInfo <- getDBConnectInfo conf
 -- >  withTestDB conInfo 3 (mapM_ script migrations) $ \pool -> do
 -- >     «run tests...»
-withTestDB :: ConnectInfo
+withTestDB :: (MonadLoggerIO m, MonadUnliftIO m, Ex.MonadCatch m)
+           => ConnectInfo
            -> Int -- ^ Maximum number of connections in the pool
-           -> Migrate -- ^ Migration to run once after connection is established
-           -> (ConnectionPool -> LoggingT IO a)
-           -> LoggingT IO a
+           -> Migration.M () -- ^ Migration to run once after connection is established
+           -> (ConnectionPool -> m a)
+           -> m a
 withTestDB ci cs doMigrate f =
   withDBPool ci cs dbSetup $ \pool -> f pool
   where
-    -- dbSetup :: (MonadIO m, MonadLogger m) => ReaderT SqlBackend m ()
-    dbSetup :: ReaderT SqlBackend (LoggingT IO) ()
+    dbSetup :: Migration.M ()
     dbSetup = do
-      logger <- askLoggerIO
       resetDB
-      ReaderT $ \backend ->
-        liftIO $ runLoggingT (runReaderT doMigrate backend) logger
+      doMigrate
       makeConstraintsDeferrable
     resetDB = P.rawExecute
       [sql|
@@ -148,7 +150,7 @@ data TestDone = TestDone
 -- >
 -- > specApi connInfo migrate withTest spec
 specApi :: ConnectInfo -- ^ Database connection info
-        -> Migrate -- ^ Migration script to run once
+        -> Migration.M () -- ^ Migration script to run once
         -> (ConnectionPool
              -> (st -> Application -> IO TestDone)
              -> LoggingT IO TestDone)
@@ -157,20 +159,20 @@ specApi :: ConnectInfo -- ^ Database connection info
         -> IO ()
 specApi ci migration withMkApp spec =
   loggingToChan 20 $ \getLogs -> do
-  logFun <- askLoggerIO
-  withTestDB ci 5 migration $ \pool ->
-    lift . hspec $ aroundWith ( \s () -> runLoggingT (do
-      let s' st app = s ((pool, st), app) >> return TestDone
-      -- Drain logs so we don't get logs from previous tests
-      _ <- liftIO $ getLogs
-      P.runSqlPool cleanDB pool
-      Ex.onException (withMkApp pool s') $ do
-        liftIO (mapM_ (BS.hPutStrLn stderr) =<< getLogs)
-      return ()
-                                              ) logFun
+    logFun <- askLoggerIO
+    withTestDB ci 5 migration $ \pool ->
+      lift . hspec $ aroundWith ( \s () -> runLoggingT (do
+        let s' st app = s ((pool, st), app) >> return TestDone
+        -- Drain logs so we don't get logs from previous tests
+        _ <- liftIO $ getLogs
+        P.runSqlPool cleanDB pool
+        Ex.onException (withMkApp pool s') $ do
+          liftIO (mapM_ (BS.hPutStrLn stderr) =<< getLogs)
+        return ()
+                                                ) logFun
 
-                )
-     spec
+                  )
+       spec
 
 -- | Read database connection info from environment variables, reverting to
 -- defaults if unset.

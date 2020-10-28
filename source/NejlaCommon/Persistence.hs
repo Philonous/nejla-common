@@ -188,6 +188,7 @@ import           Web.PathPieces
 
 import           NejlaCommon.Helpers
 import           NejlaCommon.Config
+import qualified NejlaCommon.Persistence.Migration as Migration
 
 --------------------------------------------------------------------------------
 -- SQL Monad -------------------------------------------------------------------
@@ -1092,16 +1093,17 @@ withPool conf n f = withPoolNoWait conf n $ \pool -> do
   runPoolRetry pool (return ())
   f pool
 
-withDBPool :: (MonadLogger m, MonadUnliftIO m, Ex.MonadCatch m)
+withDBPool :: (MonadLoggerIO m, MonadUnliftIO m, Ex.MonadCatch m)
            => Postgres.ConnectInfo -- ^ Connection parameters
            -> Int -- ^ Maximum number of open connections
-           -> ReaderT SqlBackend m () -- ^ Action to run before passing the pool
-                                      -- (e.g. migrations)
+           -> Migration.M () -- ^ Action to run before passing the pool
+                             -- (e.g. migrations)
            -> (ConnectionPool -> m a)
            -> m a
-withDBPool conInfo cons migr f =
+withDBPool conInfo cons migr f = do
+  logger <- askLoggerIO
   withPostgresqlPool (Postgres.postgreSQLConnectionString conInfo) cons $ \pool -> do
-    runPoolRetry pool migr
+    liftIO $ runLoggingT (runPoolRetry pool migr) logger
     f pool
 
 -- | Try to run a database action with a pool and retry until connection can be
