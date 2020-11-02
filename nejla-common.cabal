@@ -24,11 +24,15 @@ library
       NejlaCommon.Helpers
       NejlaCommon.Sendmail
       NejlaCommon.Test
+      NejlaCommon.Test.Postgres
+      NejlaCommon.Test.Json
+      NejlaCommon.Test.Logging
+      NejlaCommon.Test.Expectation
       NejlaCommon.Persistence.Migration
+      NejlaCommon.Persistence.SqlStatistics
   other-modules:
       NejlaCommon.Logging
       NejlaCommon.Persistence
-      NejlaCommon.Persistence.SqlStatistics
       NejlaCommon.Persistence.Util
       NejlaCommon.Wai
       Paths_nejla_common
@@ -72,6 +76,8 @@ library
     , random-shuffle
     , resourcet
     , singletons >=1.1
+    , stm
+    , stm-chans
     , template-haskell >=2.12
     , text
     , th-lift-instances

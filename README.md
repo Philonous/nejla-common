@@ -53,7 +53,7 @@ To run a database action, lift it into App using the `db` function for privilege
 
 ## Retrieving application state
 
-To grab the application state you set in `runApp'`, use `aslState` or
+To grab the application state you set in `runApp'`, use `askState` or
 `viewState`. The latter allows you to pass a lens to retrieve the part that
 interests you
 

@@ -24,6 +24,8 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 module NejlaCommon.Persistence
   ( -- * SQL Monad
     Privilege (..)
@@ -55,6 +57,13 @@ module NejlaCommon.Persistence
   , withRepeatableRead
   , withSerializable
   , forkApp
+  -- * Database setup and connectivity
+  , getDBConnectInfo
+  , withDBPool
+  , runPoolRetry
+  -- ** Deprecated functionality
+  , withPoolNoWait
+  , withPool
   -- * Persistence Helpers
   , checkmarkToBool
   , boolToCheckmark
@@ -124,7 +133,6 @@ import qualified Control.Lens                      as L
 import           Control.Lens.TH
 import           Control.Monad.Base
 import qualified Control.Monad.Catch               as Ex
-import           Control.Monad.Fail                (MonadFail)
 import           Control.Monad.IO.Unlift           (MonadUnliftIO)
 import           Control.Monad.Logger
 import           Control.Monad.Reader
@@ -147,6 +155,7 @@ import qualified Data.Text.Encoding                as Text
 import qualified Data.Text.Encoding.Error          as Text
 import           Data.Time
 import           Data.UUID                         (UUID)
+import qualified Data.UUID                         as UUID
 import           Database.Esqueleto                ( SqlBackend, ConnectionPool
                                                    , Checkmark(..)
                                                    , Value(..), Entity(..)
@@ -161,16 +170,25 @@ import           Database.Esqueleto                ( SqlBackend, ConnectionPool
                                                    )
 import qualified Database.Esqueleto                as E
 
+import qualified Data.Text                         as TS
 import           Database.Esqueleto.Internal.Sql
 import qualified Database.Esqueleto.PostgreSQL     as Postgres
+import           Database.Persist.Postgresql       ( PersistFieldSql
+                                                   , PersistValue(..)
+                                                   , SqlType(..)
+                                                   , withPostgresqlPool
+                                                   )
 import qualified Database.PostgreSQL.Simple        as Postgres
 import           Database.PostgreSQL.Simple.Errors
 import           GHC.Generics
 import qualified Language.Haskell.TH               as TH
 import           System.Random
 import           System.Random.Shuffle
+import           Web.PathPieces
 
 import           NejlaCommon.Helpers
+import           NejlaCommon.Config
+import qualified NejlaCommon.Persistence.Migration as Migration
 
 --------------------------------------------------------------------------------
 -- SQL Monad -------------------------------------------------------------------
@@ -294,7 +312,7 @@ makeLensesWith camelCaseFields ''SqlConfig
 defaultSqlConfig :: SqlConfig
 defaultSqlConfig = SqlConfig { sqlConfigNumRetries = 3
                              , sqlConfigRetryMinDelay = 0 -- 0 ms
-                             , sqlConfigRetryMaxDelay = 100000 -- 0 ms
+                             , sqlConfigRetryMaxDelay = 100000 -- 100 ms
                              , sqlConfigRetryableErrors
                                =  [ "40001" -- serialization_failure
                                   , "40P01" -- deadlock_detected
@@ -1000,3 +1018,106 @@ mkUniqueRandomHrID fromCandidate len field = do
     if (rows :: Rational) > 0
         then mkUniqueRandomHrID fromCandidate len field
         else return $ fromCandidate candidate
+
+
+instance PersistField UUID.UUID where
+    toPersistValue = toPersistValue . UUID.toString
+    fromPersistValue x = case x of
+        PersistDbSpecific bs ->
+            case UUID.fromASCIIBytes bs of
+             Nothing -> Left $ "Invalid UUID: " <> TS.pack (show bs)
+             Just u -> Right u
+        PersistText txt ->
+            case UUID.fromString $ TS.unpack txt of
+             Nothing -> Left $ "Invalid UUID: " <> TS.pack (show txt)
+             Just u -> Right u
+        e -> Left $ "Can not convert to uuid: " <> TS.pack (show e)
+
+instance PersistFieldSql UUID.UUID where
+    sqlType _ = SqlOther "uuid"
+
+instance PathPiece UUID.UUID where
+    fromPathPiece = UUID.fromString . TS.unpack
+    toPathPiece = TS.pack . UUID.toString
+
+-- | Parse database connection info from configuration file or environment
+-- variables. The relevant variables are
+--
+-- * DB_HOST / db.host (default = "localhost")
+-- * DB_PORT / db.port (default = 5432)
+-- * DB_USER / db.user  (default = "postgres")
+-- * DB_PASSWORD / db.password (default = "")
+-- * DB_DATABASE / db.database (default = "postgres")
+getDBConnectInfo :: (MonadLogger m, MonadIO m) => Config -> m Postgres.ConnectInfo
+getDBConnectInfo conf = do
+  dbHost <- getConf "DB_HOST" "db.host" (Right "localhost") conf
+  dbUser <- getConf "DB_USER" "db.user" (Right "postgres") conf
+  dbDatabase <- getConf "DB_DATABASE" "db.database" (Right "postgres") conf
+  dbPassword <- getConf "DB_PASSWORD" "db.password" (Right "") conf
+  dbPort <- getConf' "DB_PORT" "db.port" (Right 5432) conf
+  return Postgres.ConnectInfo { Postgres.connectPort = dbPort
+                              , Postgres.connectHost = Text.unpack dbHost
+                              , Postgres.connectUser = Text.unpack dbUser
+                              , Postgres.connectDatabase = Text.unpack dbDatabase
+                              , Postgres.connectPassword = Text.unpack dbPassword
+                              }
+
+{-# DEPRECATED withPoolNoWait "use getDBConnectionString to parse database connection info" #-}
+
+withPoolNoWait ::
+     (MonadIO m, MonadUnliftIO m, MonadBaseControl IO m, MonadLogger m)
+  => Config
+  -> Int
+  -> (ConnectionPool -> m b)
+  -> m b
+withPoolNoWait conf n f = do
+    conInfo <- getDBConnectInfo conf
+    let connectionString = Postgres.postgreSQLConnectionString conInfo
+    $logDebug $ "Using connection string: \""
+                <> Text.decodeUtf8 connectionString <> "\""
+    withPostgresqlPool connectionString n f
+
+{-# DEPRECATED withPool "use getDBConnectionString to parse database connection info" #-}
+withPool ::
+     ( MonadIO m
+     , MonadUnliftIO m
+     , MonadBaseControl IO m
+     , MonadLogger m
+     , Ex.MonadCatch m
+     )
+  => Config
+  -> Int
+  -> (ConnectionPool -> m b)
+  -> m b
+withPool conf n f = withPoolNoWait conf n $ \pool -> do
+  runPoolRetry pool (return ())
+  f pool
+
+withDBPool :: (MonadLoggerIO m, MonadUnliftIO m, Ex.MonadCatch m)
+           => Postgres.ConnectInfo -- ^ Connection parameters
+           -> Int -- ^ Maximum number of open connections
+           -> Migration.M () -- ^ Action to run before passing the pool
+                             -- (e.g. migrations)
+           -> (ConnectionPool -> m a)
+           -> m a
+withDBPool conInfo cons migr f = do
+  logger <- askLoggerIO
+  withPostgresqlPool (Postgres.postgreSQLConnectionString conInfo) cons $ \pool -> do
+    liftIO $ runLoggingT (runPoolRetry pool migr) logger
+    f pool
+
+-- | Try to run a database action with a pool and retry until connection can be
+-- established
+runPoolRetry ::
+     (MonadIO m, MonadUnliftIO m, Ex.MonadCatch m, MonadLogger m)
+  => ConnectionPool
+  -> ReaderT SqlBackend m a
+  -> m a
+runPoolRetry pool f =
+    Ex.catchIOError (E.runSqlPool f pool) $ \e -> do
+    liftIO $ threadDelay 1000000
+    $logWarn $
+      "Could not connect to database, retrying ( " <>
+      (Text.pack . show . show $ e) <>
+      ")"
+    runPoolRetry pool f

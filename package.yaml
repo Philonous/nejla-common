@@ -39,7 +39,12 @@ library:
     - NejlaCommon.Helpers
     - NejlaCommon.Sendmail
     - NejlaCommon.Test
+    - NejlaCommon.Test.Postgres
+    - NejlaCommon.Test.Json
+    - NejlaCommon.Test.Logging
+    - NejlaCommon.Test.Expectation
     - NejlaCommon.Persistence.Migration
+    - NejlaCommon.Persistence.SqlStatistics
   dependencies:
     - base >=4.7 && <5.0
     - async
@@ -61,6 +66,8 @@ library:
     - random-shuffle
     - resourcet
     - singletons >=1.1
+    - stm
+    - stm-chans
     - template-haskell >=2.12
     - th-lift-instances
     - time >=1.5
