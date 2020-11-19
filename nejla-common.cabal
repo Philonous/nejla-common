@@ -72,6 +72,7 @@ library
     , persistent-postgresql
     , persistent-template
     , postgresql-simple
+    , process
     , random
     , random-shuffle
     , resourcet
