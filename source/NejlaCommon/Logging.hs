@@ -212,7 +212,7 @@ instance IsLogEvent RequestLog where
   toLogEvent = eventDetails "request"
 
 instance FastLogger.ToLogStr RequestLog where
-  toLogStr = toLogStr . Aeson.encode
+  toLogStr = toLogStr . (<> "\n") . Aeson.encode
 
 -- | Middleware for logging http requests and responses.
 --
