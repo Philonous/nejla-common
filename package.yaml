@@ -62,6 +62,7 @@ library:
     - mime-mail
     - mtl >=2.2
     - path-pieces
+    - process
     - random
     - random-shuffle
     - resourcet

@@ -5,7 +5,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -15,33 +14,33 @@ module NejlaCommon.Logging
   -- @TODO: Explicit export. Don't export LogEvent constructor!
 where
 
-import qualified Control.Exception as Ex
-import           Control.Lens hiding ((.=))
+import qualified Control.Exception                     as Ex
+import           Control.Lens                          hiding ((.=))
 import           Control.Monad.Logger
 import           Control.Monad.Trans
 import           Data.Aeson
-import qualified Data.Aeson as Aeson
-import qualified Data.Aeson.TH as Aeson
-import           Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Builder as BS
-import qualified Data.ByteString.Lazy as BSL
-import qualified Data.CaseInsensitive as CI
+import qualified Data.Aeson                            as Aeson
+import qualified Data.Aeson.TH                         as Aeson
+import           Data.ByteString                       (ByteString)
+import qualified Data.ByteString                       as BS
+import qualified Data.ByteString.Builder               as BS
+import qualified Data.ByteString.Lazy                  as BSL
+import qualified Data.CaseInsensitive                  as CI
 import           Data.Data
-import qualified Data.HashMap.Strict as HMap
+import qualified Data.HashMap.Strict                   as HMap
 import           Data.IORef
-import qualified Data.List as List
-import           Data.Monoid
-import           Data.Text (Text)
-import qualified Data.Text.Encoding as Text
-import qualified Data.Text.Encoding.Error as Text
-import qualified Data.Text.IO as Text
-import           Data.Time.Clock (UTCTime)
-import           Data.Time.Clock (getCurrentTime)
+import qualified Data.List                             as List
+import           Data.Text                             (Text)
+import qualified Data.Text.Encoding                    as Text
+import qualified Data.Text.Encoding.Error              as Text
+import qualified Data.Text.IO                          as Text
+import           Data.Time.Clock                       ( UTCTime, getCurrentTime )
 import           GHC.Generics
-import qualified Network.HTTP.Types as HTTP
-import qualified Network.Wai as Wai
+import qualified Network.HTTP.Types                    as HTTP
+import qualified Network.Wai                           as Wai
 import           System.IO
+import qualified System.Log.FastLogger                 as FastLogger
+import qualified System.Process                        as Process
 
 import           NejlaCommon.Helpers
 
@@ -212,6 +211,9 @@ Aeson.deriveJSON (aesonTHOptions "requestLog") ''RequestLog
 instance IsLogEvent RequestLog where
   toLogEvent = eventDetails "request"
 
+instance FastLogger.ToLogStr RequestLog where
+  toLogStr = toLogStr . (<> "\n") . Aeson.encode
+
 -- | Middleware for logging http requests and responses.
 --
 -- /NB/ The entirety of the request and response bodies are logged, which can be
@@ -222,7 +224,7 @@ logHttpCalls logRequest app request' respond = do
     -- We can't use (Wai.strictRequestBody request) because that consumes the
     -- request body. TODO: Figure this out
     (reqB, reqBody) <- do
-        body <- getBody (Wai.requestBody request') BS.empty
+        body <- getBody (Wai.getRequestBodyChunk request') BS.empty
         bdRef <- newIORef body
         let rBody = do
                 bd <- readIORef bdRef
@@ -264,6 +266,41 @@ logHttpCalls logRequest app request' respond = do
           txt = Text.decodeUtf8With Text.lenientDecode
                   . BSL.toStrict . BS.toLazyByteString $ mconcat chunks
       return $ Just txt
+
+-- | Log to a file
+--
+-- Logged data includes all headers, request an response bodies, HTTP response
+-- codes and network addresses.
+--
+-- A timestamp (according to the provided format) is prefixed to the
+-- filename. When the timestamp changes a new file is created and the old file
+-- is compressed using xc
+--
+-- This function assumes that an 'xz' executable is in path
+--
+-- Example usage:
+-- > run = withFileLogger "/var/log/myserver.log" "%F" $ \logger -> do
+-- >   Warp.run (logHttpCalls logger) myApp
+withFileLogger :: ToLogStr log =>
+                  FilePath -- ^ Base name of the log files, a timestamp is
+                                -- prepended to the base name
+               -> Text -- ^ Timestamp format (e.g. "%F" for date). Same
+                       -- format as stftime, see
+                       -- https://linux.die.net/man/3/strftime
+               -> ((log -> IO ()) -> IO a) -- ^ Callback
+               -> IO a
+withFileLogger path format f = do
+  let logSpec = FastLogger.TimedFileLogSpec
+        { FastLogger.timed_log_file = path
+        , FastLogger.timed_timefmt = Text.encodeUtf8 format
+        , FastLogger.timed_same_timeframe = (==)
+        , FastLogger.timed_post_process = \file ->
+            Process.callProcess "xz" [file]
+        }
+      logConfig = FastLogger.LogFileTimedRotate logSpec 4096
+
+  FastLogger.withFastLogger logConfig $ \logger -> do
+    f (logger . toLogStr)
 
 --------------------------------------------------------------------------------
 -- Critical Event --------------------------------------------------------------
