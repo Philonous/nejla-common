@@ -202,6 +202,7 @@ data RequestLog =
              , requestLogHeaders      :: ![LogHeader]
              , requestLogRequestBody  :: !(Maybe Text)
              , requestLogResponseCode :: !Int
+             , requestLogResponseHeaders :: ![LogHeader]
              , requestLogResponseBody :: !(Maybe Text)
              , requestLogIP           :: !(Maybe Text)
              } deriving (Show, Typeable, Data, Generic)
@@ -243,6 +244,7 @@ logHttpCalls logRequest app request' respond = do
                      , requestLogRequestBody         = bst <$> reqBody
                      , requestLogResponseCode =
                          HTTP.statusCode $ Wai.responseStatus response
+                     , requestLogResponseHeaders = toLogHeaders $ Wai.responseHeaders response
                      , requestLogResponseBody = body
                      , requestLogIP = bst <$> (List.lookup "X-Real-IP"
                                                 $ Wai.requestHeaders request)
