@@ -10,6 +10,11 @@ copyright:
 license: BSD3
 homepage: https://github.com/nejla/nejla-common
 
+when:
+  - condition: impl(ghc >= 8.10)
+    default-extensions:
+      - StandaloneKindSignatures
+
 dependencies:
   - aeson
   - bytestring
