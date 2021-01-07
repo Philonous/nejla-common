@@ -60,6 +60,7 @@ import           NejlaCommon.Helpers
 data LogRow = LogRow { logRowTime    :: !UTCTime
                      , logRowEvent   :: !Text
                      , logRowSource  :: !Text
+                     , logRowLevel   :: !LogLevel
                      , logRowDetails :: !Value
                      } deriving (Show, Eq)
 
@@ -69,6 +70,7 @@ instance ToJSON LogRow where
         commons = [ "time"  .= logRowTime lr
                   , "event" .= logRowEvent lr
                   , "source" .= logRowSource lr
+                  , "level" .= logRowLevel lr
                   ]
     in case v of
          Object o ->
@@ -81,16 +83,19 @@ instance FromJSON LogRow where
     time <- o .: "time"
     source <- o .: "source"
     mbPayload <- o .:? "details"
+    lvl <- o .:? "level"
     payload <- case mbPayload of
                  Nothing -> parseJSON . Object $
                              o // "event"
                                // "time"
                                // "source"
+                               // "level"
                  Just pl -> return pl
     return LogRow { logRowTime    = time
                   , logRowEvent   = tp
                   , logRowDetails = payload
                   , logRowSource  = source
+                  , logRowLevel   = lvl
                   }
       where
          infixl 8 //
@@ -98,6 +103,17 @@ instance FromJSON LogRow where
 
 instance ToLogStr LogRow where
   toLogStr s = toLogStr $ Aeson.encode s
+
+-- | Use fast-logger / monad-logger log function to log log row
+fromLogFun :: (Loc -> LogSource -> LogLevel -> LogStr -> IO ())
+           -> LogRow
+           -> IO ()
+fromLogFun logfun row =
+  logfun defaultLoc (logRowSource row) (logRowLevel row) (toLogStr row)
+  where
+    defaultLoc :: Loc
+    defaultLoc = Loc "<unknown>" "<unknown>" "<unknown>" (0,0) (0,0)
+
 
 -- | An Event to be logged. Use the 'event' constructor to create and update
 -- using record syntax or lenses (see 'event' for more details)
@@ -181,6 +197,7 @@ logEvent (toLogEvent -> lEvent) = do
                    , logRowEvent   = lEvent ^. type'
                    , logRowDetails = lEvent ^. details
                    , logRowSource  = lEvent ^. source
+                   , logRowLevel   = lEvent ^. level
                    }
 
 --------------------------------------------------------------------------------
@@ -265,6 +282,7 @@ logHttpCalls logRequest app request' respond = do
               , logRowEvent = "http full request"
               , logRowSource = "logHttpCalls"
               , logRowDetails = toJSON reqLog
+              , logRowLevel = LevelInfo
               }
         logRequest logRow
         respond response
@@ -327,7 +345,6 @@ withFileLogger path format f = do
 data ExceptionEvent = ExceptionEvent
   { exceptionEventException :: !Text
   , exceptionEventDescription :: !Text
-  , exceptionEventSource :: !Text
   } deriving Show
 
 Aeson.deriveJSON (aesonTHOptions "exceptionEvent") '' ExceptionEvent
@@ -346,13 +363,13 @@ logOnException logFunction = Warp.setOnException $ \mbReq (Ex.SomeException e) -
           ExceptionEvent
           { exceptionEventException = Text.pack $ show (typeOf e)
           , exceptionEventDescription = Text.pack $ show e
-          , exceptionEventSource = src
           }
         row =
           LogRow
           { logRowTime = now
           , logRowEvent = "unhandled exception"
-          , logRowSource = "Exception"
+          , logRowSource = src
           , logRowDetails = toJSON evt
+          , logRowLevel = LevelError
           }
     logFunction row
