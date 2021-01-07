@@ -7,46 +7,53 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module NejlaCommon.Logging
   -- @TODO: Explicit export. Don't export LogEvent constructor!
 where
 
-import qualified Control.Exception                     as Ex
-import           Control.Lens                          hiding ((.=))
+import qualified Control.Exception        as Ex
+import           Control.Lens             hiding ((.=))
 import           Control.Monad.Logger
 import           Control.Monad.Trans
 import           Data.Aeson
-import qualified Data.Aeson                            as Aeson
-import qualified Data.Aeson.TH                         as Aeson
-import           Data.ByteString                       (ByteString)
-import qualified Data.ByteString                       as BS
-import qualified Data.ByteString.Builder               as BS
-import qualified Data.ByteString.Lazy                  as BSL
-import qualified Data.CaseInsensitive                  as CI
+import qualified Data.Aeson               as Aeson
+import qualified Data.Aeson.TH            as Aeson
+import           Data.ByteString          (ByteString)
+import qualified Data.ByteString          as BS
+import qualified Data.ByteString.Builder  as BS
+import qualified Data.ByteString.Lazy     as BSL
+import qualified Data.CaseInsensitive     as CI
 import           Data.Data
-import qualified Data.HashMap.Strict                   as HMap
+import qualified Data.HashMap.Strict      as HMap
 import           Data.IORef
-import qualified Data.List                             as List
-import           Data.Text                             (Text)
-import qualified Data.Text.Encoding                    as Text
-import qualified Data.Text.Encoding.Error              as Text
-import qualified Data.Text.IO                          as Text
-import           Data.Time.Clock                       ( UTCTime, getCurrentTime )
+import qualified Data.List                as List
+import           Data.Text                (Text)
+import qualified Data.Text                as Text
+import qualified Data.Text.Encoding       as Text
+import qualified Data.Text.Encoding.Error as Text
+import qualified Data.Text.IO             as Text
+import           Data.Time.Clock          ( UTCTime, getCurrentTime )
 import           GHC.Generics
-import qualified Network.HTTP.Types                    as HTTP
-import qualified Network.Wai                           as Wai
+import qualified Network.HTTP.Types       as HTTP
+import qualified Network.Wai              as Wai
+import qualified Network.Wai.Handler.Warp as Warp
 import           System.IO
-import qualified System.Log.FastLogger                 as FastLogger
-import qualified System.Process                        as Process
+import qualified System.Log.FastLogger    as FastLogger
+import qualified System.Process           as Process
 
 import           NejlaCommon.Helpers
 
 --------------------------------------------------------------------------------
 -- Logging type class ----------------------------------------------------------
 --------------------------------------------------------------------------------
+
+-- LogRow and LogEvent are very similar and should maybe be joined.
+-- The difference is that LogRow has times resolved
 
 -- | Standardized logging row. This is a helper type to construct the JSON in
 -- log messages
@@ -88,6 +95,9 @@ instance FromJSON LogRow where
       where
          infixl 8 //
          o // k = HMap.delete k o
+
+instance ToLogStr LogRow where
+  toLogStr s = toLogStr $ Aeson.encode s
 
 -- | An Event to be logged. Use the 'event' constructor to create and update
 -- using record syntax or lenses (see 'event' for more details)
@@ -154,15 +164,14 @@ instance IsLogEvent LogEvent where
 logEvent :: (MonadIO m, MonadLogger m, IsLogEvent a) =>
             a
          -> m ()
-logEvent (toLogEvent -> lEvent)= do
+logEvent (toLogEvent -> lEvent) = do
   row <- liftIO toLogRow
-  logWithoutLoc "json_event" (lEvent ^. level) $ encodeText row
+  logWithoutLoc "json_event" (lEvent ^. level) row
 
   where
     logWithoutLoc = monadLoggerLog defaultLoc
     defaultLoc :: Loc
     defaultLoc = Loc "<unknown>" "<unknown>" "<unknown>" (0,0) (0,0)
-    encodeText = Text.decodeUtf8 . BSL.toStrict . Aeson.encode
     toLogRow :: IO LogRow
     toLogRow = do
       time' <- case lEvent ^. time of
@@ -219,11 +228,9 @@ instance FastLogger.ToLogStr RequestLog where
 --
 -- /NB/ The entirety of the request and response bodies are logged, which can be
 -- very large
-logHttpCalls :: (RequestLog -> IO ())
-               ->  Wai.Middleware
+logHttpCalls :: (LogRow -> IO ())
+             ->  Wai.Middleware
 logHttpCalls logRequest app request' respond = do
-    -- We can't use (Wai.strictRequestBody request) because that consumes the
-    -- request body. TODO: Figure this out
     (reqB, reqBody) <- do
         body <- getBody (Wai.getRequestBodyChunk request') BS.empty
         bdRef <- newIORef body
@@ -235,20 +242,31 @@ logHttpCalls logRequest app request' respond = do
     let request = request'{Wai.requestBody = reqB}
     rr <- app request $ \response -> do
         body <- responseToText response
-        logRequest
-          RequestLog { requestLogMethod       = bst $ Wai.requestMethod request
-                     , requestLogPath         = Wai.pathInfo request
-                     , requestLogQuery        = bst $ Wai.rawQueryString request
-                     , requestLogHeaders      =
-                         toLogHeaders $ Wai.requestHeaders request
-                     , requestLogRequestBody         = bst <$> reqBody
-                     , requestLogResponseCode =
-                         HTTP.statusCode $ Wai.responseStatus response
-                     , requestLogResponseHeaders = toLogHeaders $ Wai.responseHeaders response
-                     , requestLogResponseBody = body
-                     , requestLogIP = bst <$> (List.lookup "X-Real-IP"
-                                                $ Wai.requestHeaders request)
-                     }
+        now <- getCurrentTime
+        let reqLog =
+              RequestLog
+              { requestLogMethod       = bst $ Wai.requestMethod request
+              , requestLogPath         = Wai.pathInfo request
+              , requestLogQuery        = bst $ Wai.rawQueryString request
+              , requestLogHeaders      =
+                  toLogHeaders $ Wai.requestHeaders request
+              , requestLogRequestBody         = bst <$> reqBody
+              , requestLogResponseCode =
+                  HTTP.statusCode $ Wai.responseStatus response
+              , requestLogResponseHeaders = toLogHeaders $ Wai.responseHeaders response
+              , requestLogResponseBody = body
+              , requestLogIP = bst <$> (List.lookup "X-Real-IP"
+                                         $ Wai.requestHeaders request)
+              }
+
+            logRow =
+              LogRow
+              { logRowTime = now
+              , logRowEvent = "http full request"
+              , logRowSource = "logHttpCalls"
+              , logRowDetails = toJSON reqLog
+              }
+        logRequest logRow
         respond response
     return rr
   where
@@ -304,35 +322,37 @@ withFileLogger path format f = do
   FastLogger.withFastLogger logConfig $ \logger -> do
     f (logger . toLogStr)
 
---------------------------------------------------------------------------------
--- Critical Event --------------------------------------------------------------
---------------------------------------------------------------------------------
+-- Logging of Exceptions
 
-data CriticalEvent =
-  CriticalEvent
-    { criticalEventTime      :: !UTCTime
-    , criticalEventSystem    :: !Text
-    , criticalEventCondition :: !Text
-    , criticalEventContext   :: !Text
-    , criticalEventDetails   :: !Text
-    } deriving (Show, Typeable, Data, Generic)
+data ExceptionEvent = ExceptionEvent
+  { exceptionEventException :: !Text
+  , exceptionEventDescription :: !Text
+  , exceptionEventSource :: !Text
+  } deriving Show
 
-catchMiddleware :: (CriticalEvent -> IO ()) -> Wai.Middleware
-catchMiddleware lEvent app = \req cont ->
-    Ex.catch (app req cont)
-        (\e -> do
-              now <- getCurrentTime
-              Text.hPutStrLn stderr $ "[Error] Unhandled exception: "
-                                      <> showText (e :: Ex.SomeException)
-              Ex.catch ( lEvent $
-                  CriticalEvent
-                    { criticalEventTime = now
-                    , criticalEventSystem = "API"
-                    , criticalEventCondition = "unhandled exception"
-                    , criticalEventContext = ""
-                    , criticalEventDetails = showText e
-                    })
-                  (\e' -> Text.hPutStrLn stderr $
-                         "[Error] Exception while trying to write to Critical Event log: "
-                         <> showText (e' :: Ex.SomeException))
-              cont (Wai.responseBuilder HTTP.status500 [] ""))
+Aeson.deriveJSON (aesonTHOptions "exceptionEvent") '' ExceptionEvent
+
+logOnException :: (LogRow -> IO ()) -> Warp.Settings -> Warp.Settings
+logOnException logFunction = Warp.setOnException $ \mbReq (Ex.SomeException e) -> do
+    now <- getCurrentTime
+    let src = case mbReq of
+                Nothing -> "server"
+                Just req -> Text.decodeUtf8With Text.lenientDecode
+                              (Wai.requestMethod req)
+                              <> " "
+                              <> Text.decodeUtf8With Text.lenientDecode
+                                   (Wai.rawPathInfo req)
+    let evt =
+          ExceptionEvent
+          { exceptionEventException = Text.pack $ show (typeOf e)
+          , exceptionEventDescription = Text.pack $ show e
+          , exceptionEventSource = src
+          }
+        row =
+          LogRow
+          { logRowTime = now
+          , logRowEvent = "unhandled exception"
+          , logRowSource = "Exception"
+          , logRowDetails = toJSON evt
+          }
+    logFunction row
