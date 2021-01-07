@@ -70,12 +70,19 @@ instance ToJSON LogRow where
         commons = [ "time"  .= logRowTime lr
                   , "event" .= logRowEvent lr
                   , "source" .= logRowSource lr
-                  , "level" .= logRowLevel lr
+                  , "level" .= fromLogLevel (logRowLevel lr)
                   ]
     in case v of
          Object o ->
            Object $ o <> HMap.fromList commons
          _ -> object $ [ "details" .= v ] <> commons
+    where
+      fromLogLevel :: LogLevel -> Text
+      fromLogLevel LevelDebug = "DEBUG"
+      fromLogLevel LevelInfo = "INFO"
+      fromLogLevel LevelWarn = "WARN"
+      fromLogLevel LevelError = "ERROR"
+      fromLogLevel (LevelOther other) = other
 
 instance FromJSON LogRow where
   parseJSON = withObject "log row" $ \o -> do
@@ -83,7 +90,7 @@ instance FromJSON LogRow where
     time <- o .: "time"
     source <- o .: "source"
     mbPayload <- o .:? "details"
-    lvl <- o .:? "level"
+    lvl <- toLogLevel <$> o .: "level"
     payload <- case mbPayload of
                  Nothing -> parseJSON . Object $
                              o // "event"
@@ -100,6 +107,16 @@ instance FromJSON LogRow where
       where
          infixl 8 //
          o // k = HMap.delete k o
+         toLogLevel :: Text -> LogLevel
+         toLogLevel txt = case matchLogLevel $ Text.toUpper txt of
+                            Just lvl -> lvl
+                            Nothing -> LevelOther txt
+         matchLogLevel "DEBUG" = Just LevelDebug
+         matchLogLevel "INFO"  = Just LevelInfo
+         matchLogLevel "WARN"  = Just LevelWarn
+         matchLogLevel "ERROR" = Just LevelError
+         matchLogLevel _   = Nothing
+
 
 instance ToLogStr LogRow where
   toLogStr s = toLogStr $ Aeson.encode s
