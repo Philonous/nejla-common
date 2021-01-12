@@ -1,0 +1,6 @@
+image: node
+
+test:
+  script:
+    - npm i
+    - npx eslint --ext .js,.vue .
