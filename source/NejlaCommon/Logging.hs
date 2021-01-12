@@ -362,6 +362,8 @@ withFileLogger path format f = do
 data ExceptionEvent = ExceptionEvent
   { exceptionEventException :: !Text
   , exceptionEventDescription :: !Text
+  , exceptionEventMethod :: !Text
+  , exceptionEventPath :: !Text
   } deriving Show
 
 Aeson.deriveJSON (aesonTHOptions "exceptionEvent") '' ExceptionEvent
@@ -369,23 +371,25 @@ Aeson.deriveJSON (aesonTHOptions "exceptionEvent") '' ExceptionEvent
 logOnException :: (LogRow -> IO ()) -> Warp.Settings -> Warp.Settings
 logOnException logFunction = Warp.setOnException $ \mbReq (Ex.SomeException e) -> do
     now <- getCurrentTime
-    let src = case mbReq of
-                Nothing -> "server"
-                Just req -> Text.decodeUtf8With Text.lenientDecode
+    let (method, path) = case mbReq of
+                Nothing -> ("N/A", "server")
+                Just req -> (Text.decodeUtf8With Text.lenientDecode
                               (Wai.requestMethod req)
-                              <> " "
-                              <> Text.decodeUtf8With Text.lenientDecode
-                                   (Wai.rawPathInfo req)
+                            , Text.decodeUtf8With Text.lenientDecode
+                              (Wai.rawPathInfo req)
+                            )
     let evt =
           ExceptionEvent
           { exceptionEventException = Text.pack $ show (typeOf e)
           , exceptionEventDescription = Text.pack $ show e
+          , exceptionEventMethod = method
+          , exceptionEventPath = path
           }
         row =
           LogRow
           { logRowTime = now
           , logRowEvent = "unhandled exception"
-          , logRowSource = src
+          , logRowSource = "webserver"
           , logRowDetails = toJSON evt
           , logRowLevel = LevelError
           }
