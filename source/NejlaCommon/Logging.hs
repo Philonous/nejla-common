@@ -368,6 +368,32 @@ data ExceptionEvent = ExceptionEvent
 
 Aeson.deriveJSON (aesonTHOptions "exceptionEvent") '' ExceptionEvent
 
+-- | Log all unhandled Exceptions as JSON.
+-- Expects a "logger" functions that tells it where to actually print the LogRow.
+-- Use e.g. 'withFileLogger' or 'askLoggerIO' together with 'fromLogFun' to get one
+--
+-- Produces JSON for easy parsing
+--
+-- Fields:
+-- [@exception@]: Type of the exception (as produced by 'typof')
+-- [@description@]: String representation of the exception (as produced by show)
+-- [@method@]: HTTP method of the request (or "N/A" if not available)
+-- [@path@]: HTTP request path (or "server" if exception happened outside a request)
+-- [@time@]: ISO 8601 formatted timestamp
+-- [@event@]: Always "unhandled exception" (helps parsing the log message)
+-- [@level@]: Always "ERROR"
+-- [@source@]: Always "webserver"
+--
+-- > {
+-- >  "event": "unhandled exception",
+-- >  "exception": "ErrorCall",
+-- >  "path": "/crash",
+-- >  "time": "2021-01-12T15:47:08.496182106Z",
+-- >  "method": "GET",
+-- >  "source": "webserver",
+-- >  "level": "ERROR",
+-- >  "description": "crash!"
+-- > }
 logOnException :: (LogRow -> IO ()) -> Warp.Settings -> Warp.Settings
 logOnException logFunction = Warp.setOnException $ \mbReq (Ex.SomeException e) -> do
     now <- getCurrentTime
