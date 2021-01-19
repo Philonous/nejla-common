@@ -15,6 +15,16 @@ build:
 	      --test --no-run-tests \
 	      ${stack_args} \
 	      ${stack_build_args} \
+	      --haddock --no-haddock-deps
+	mkdir -p dist/
+	cp -r $(shell stack path --dist-dir)/doc/html/nejla-common dist/doc
+
+.PHONY: doc
+doc:
+	stack build ${stack_args} \
+	      ${stack_build_args} \
+	      --haddock --no-haddock-deps
+
 
 .PHONY: clean
 clean:
@@ -22,3 +32,6 @@ clean:
 	rm -rf *.cabal
 	rm -f stack.yaml.lock
 	rm -rf .stack-work
+
+.PHONY: test
+test: build
