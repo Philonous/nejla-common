@@ -53,6 +53,7 @@ instance Arbitrary LogRow where
   arbitrary = LogRow <$> arbitrary
                      <*> arbitrary
                      <*> arbitrary
+                     <*> arbitrary
                      <*> (Aeson.object <$> listOf
                            ((,) <$> (arbitrary `suchThat` (`notElem`
                                                             [ "type"

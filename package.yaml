@@ -83,6 +83,7 @@ library:
     - uuid
     - wai
     - wai-extra
+    - warp
 
 tests:
   tests:
