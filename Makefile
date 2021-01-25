@@ -17,13 +17,12 @@ build:
 	      ${stack_build_args} \
 	      --haddock --no-haddock-deps
 	mkdir -p dist/
-	cp -r $(shell stack path --dist-dir)/doc/html/nejla-common dist/doc
+	cp -fr $(shell stack path --dist-dir)/doc/html/nejla-common dist/doc
+	cp -f resources/badge-documentation.svg dist/
 
 .PHONY: doc
-doc:
-	stack build ${stack_args} \
-	      ${stack_build_args} \
-	      --haddock --no-haddock-deps
+doc: build
+	xdg-open dist/doc/index.html
 
 
 .PHONY: clean
