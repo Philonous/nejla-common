@@ -10,6 +10,13 @@ build:
   image: nejla/haskell-build
   script:
     - make
+  artifacts:
+    paths:
+      - dist/doc
+    name: "documentation-nejlacommon-$CI_COMMIT_REF_NAME"
+    expose_as: "documentation"
+    expire_in: 1 month
+
   cache:
     key: ${CI_JOB_NAME}
     paths:

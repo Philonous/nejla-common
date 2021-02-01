@@ -15,6 +15,15 @@ build:
 	      --test --no-run-tests \
 	      ${stack_args} \
 	      ${stack_build_args} \
+	      --haddock --no-haddock-deps
+	mkdir -p dist/
+	cp -fr $(shell stack path ${stack_args} --dist-dir)/doc/html/nejla-common dist/doc
+	cp -f resources/badge-documentation.svg dist/
+
+.PHONY: doc
+doc: build
+	xdg-open dist/doc/index.html
+
 
 .PHONY: clean
 clean:
@@ -22,3 +31,6 @@ clean:
 	rm -rf *.cabal
 	rm -f stack.yaml.lock
 	rm -rf .stack-work
+
+.PHONY: test
+test: build
