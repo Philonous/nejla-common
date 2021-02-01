@@ -78,6 +78,17 @@ aesonTHOptions pre' = defaultOptions{ fieldLabelModifier = mkName'
                                     , constructorTagModifier = mkCName
                                     }
   where
+    mkName' = downcase . withoutPrefix pre'
+    mkCName = downcase . withoutPrefix (upcase pre')
+
+-- | Like aesonTHOptions, but converts fields to snake_case
+aesonTHOptionsSnakeCase ::
+     [Char] -- ^ field prefix to strip
+  -> Options
+aesonTHOptionsSnakeCase pre' = defaultOptions{ fieldLabelModifier = mkName'
+                                    , constructorTagModifier = mkCName
+                                    }
+  where
     delim = "_"
     mkName' = cctu delim . withoutPrefix pre'
     mkCName = cctu delim . withoutPrefix (upcase pre')
