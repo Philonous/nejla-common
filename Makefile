@@ -17,6 +17,7 @@ build:
 	      ${stack_build_args} \
 	      --haddock --no-haddock-deps
 	mkdir -p dist/
+	rm -rf dist/doc
 	cp -fr $(shell stack path ${stack_args} --dist-dir)/doc/html/nejla-common dist/doc
 	cp -f resources/badge-documentation.svg dist/
 
