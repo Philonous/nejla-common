@@ -15,7 +15,7 @@ build:
 	      --test --no-run-tests \
 	      ${stack_args} \
 	      ${stack_build_args} \
-	      --haddock --no-haddock-deps
+	      --haddock --no-haddock-deps --haddock-hyperlink-source
 	mkdir -p dist/
 	rm -rf dist/doc
 	cp -fr $(shell stack path ${stack_args} --dist-dir)/doc/html/nejla-common dist/doc
