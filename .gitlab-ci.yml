@@ -13,7 +13,7 @@ build:
 
   parallel:
     matrix:
-      - stack-yaml:
+      - stack_yaml:
         - stack.lts16.yaml
         - stack.lts17.yaml
 
