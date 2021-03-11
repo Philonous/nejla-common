@@ -190,6 +190,8 @@ import           NejlaCommon.Helpers
 import           NejlaCommon.Config
 import qualified NejlaCommon.Persistence.Migration as Migration
 
+import qualified NejlaCommon.Persistence.Compat    as Compat
+
 --------------------------------------------------------------------------------
 -- SQL Monad -------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -903,7 +905,7 @@ foreignEnts ents = merge $ do
   let implicits = do
         field <- E.entityFields ent
         -- We don't handle optional foreign references for now.
-        when ("Maybe" `elem` E.fieldAttrs field) $ []
+        when (Compat.hasFieldAttrMaybe $ E.fieldAttrs field) []
         let nm = unHaskellName $ E.fieldHaskell field
         ref <- fromForeignRefs $ E.fieldReference field
         return ( (Text.unpack entName, Text.unpack ref)
@@ -913,16 +915,17 @@ foreignEnts ents = merge $ do
       explicits = do
         frgn <- E.entityForeigns ent
         -- Check if the foreign reference involves a maybe field
-        when ("Maybe" `elem` [ attr
-                             -- Find fields the current foreign reference
-                             -- involves
-                             | ((nm,_), _) <- E.foreignFields frgn
-                             -- Find the definitions of these fields in the entity
-                             , field <- E.entityFields ent
-                             , E.fieldHaskell field == nm
-                             -- Return attributes of these fields
-                             , attr <- E.fieldAttrs field
-                             ])
+        when (Compat.hasFieldAttrMaybe
+               [ attr
+                 -- Find fields the current foreign reference
+                 -- involves
+               | ((nm,_), _) <- E.foreignFields frgn
+                 -- Find the definitions of these fields in the entity
+               , field <- E.entityFields ent
+               , E.fieldHaskell field == nm
+                 -- Return attributes of these fields
+               , attr <- E.fieldAttrs field
+               ])
           []
 
         let remote = unHaskellName $ E.foreignRefTableHaskell frgn
