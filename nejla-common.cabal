@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.3.
+-- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
 
@@ -33,6 +33,7 @@ library
   other-modules:
       NejlaCommon.Logging
       NejlaCommon.Persistence
+      NejlaCommon.Persistence.Compat
       NejlaCommon.Persistence.Util
       NejlaCommon.Wai
       Paths_nejla_common
@@ -92,7 +93,8 @@ library
     , wai-extra
     , warp
   if impl(ghc >= 8.10)
-    default-extensions: StandaloneKindSignatures
+    default-extensions:
+        StandaloneKindSignatures
   default-language: Haskell2010
 
 test-suite tests
@@ -147,5 +149,6 @@ test-suite tests
     , unliftio
     , unordered-containers
   if impl(ghc >= 8.10)
-    default-extensions: StandaloneKindSignatures
+    default-extensions:
+        StandaloneKindSignatures
   default-language: Haskell2010
