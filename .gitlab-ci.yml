@@ -10,6 +10,13 @@ build:
   image: nejla/haskell-build
   script:
     - make
+
+  parallel:
+    matrix:
+      - stack-yaml:
+        - stack.lts16.yaml
+        - stack.lts17.yaml
+
   artifacts:
     paths:
       - dist/doc
