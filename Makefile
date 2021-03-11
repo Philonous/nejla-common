@@ -1,5 +1,5 @@
 ifeq ($(origin stack_args),undefined)
-export stack_args := --docker --docker-stack-exe download --no-nix --colour=auto
+export stack_args := --colour=auto
 endif
 
 ifeq (${TERM},dumb)
