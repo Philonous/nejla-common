@@ -1022,12 +1022,11 @@ mkUniqueRandomHrID fromCandidate len field = do
         then mkUniqueRandomHrID fromCandidate len field
         else return $ fromCandidate candidate
 
-
 instance PersistField UUID.UUID where
     toPersistValue = toPersistValue . UUID.toString
     fromPersistValue x = case x of
-        PersistDbSpecific bs ->
-            case UUID.fromASCIIBytes bs of
+        Compat.PersistLiteralCompat bs ->
+          case UUID.fromASCIIBytes bs of
              Nothing -> Left $ "Invalid UUID: " <> TS.pack (show bs)
              Just u -> Right u
         PersistText txt ->
