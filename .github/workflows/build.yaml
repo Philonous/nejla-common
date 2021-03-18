@@ -1,0 +1,42 @@
+name: build
+on:
+  - pull_request
+  - push
+
+jobs:
+  build:
+    name: CI
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        resolver: ['lts16', 'lts17']
+        include:
+        - resolver: 'lts16'
+          stack-yaml: 'stack.lts16.yaml'
+          ghc: '8.8.4'
+        - resolver: 'lts17'
+          stack-yaml: 'stack.lts17.yaml'
+          ghc: '8.10.4'
+
+    steps:
+      - name: Setup GHC
+        uses: haskell/actions/setup@v1
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          enable-stack: true
+
+      - name: Clone project
+        uses: actions/checkout@v2
+
+      - name: Cache dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.stack
+            .stack-work
+          key: ${{ matrix.resolver }}-${{ hashFiles('stack.yaml') }}-${{ hashFiles('nejla-common.cabal') }}
+          restore-keys: ${{ matrix.resolver }}-
+
+      - name: Build
+        run: 'stack --stack-yaml=${{ matrix.stack-yaml }} build --fast --test --no-run-tests --no-terminal --system-ghc'
