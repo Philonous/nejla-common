@@ -1,6 +1,6 @@
-export default function ({ $axios, redirect, store }) {
+export default function({ $axios, redirect, store }) {
   $axios.onResponseError((error) => {
-    if (error.response.status === 403) {
+    if (error.response && error.reponse.status === 403) {
       if (process.server) {
         redirect('/sign-in')
       } else {
