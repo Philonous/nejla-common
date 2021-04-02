@@ -1,5 +1,3 @@
--- Copyright © 2014-2016 Nejla AB. All rights reserved.
-
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
