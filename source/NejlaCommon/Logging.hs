@@ -1,5 +1,3 @@
--- Copyright © 2014-2015 Lambdatrade AB. All rights reserved.
-
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}

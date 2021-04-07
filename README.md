@@ -319,4 +319,4 @@ and "default" to "default'".
 Legal
 -----
 
-Copyright © 2014-2017 Nejla AB. All rights reserved.
+Copyright © 2014-2021 Nejla AB. All rights reserved.
