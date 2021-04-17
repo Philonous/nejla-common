@@ -38,7 +38,7 @@ library
       NejlaCommon.Wai
       Paths_nejla_common
   hs-source-dirs:
-      source
+      src
   ghc-options: -Wall
   build-depends:
       HUnit
