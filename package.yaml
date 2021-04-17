@@ -36,7 +36,7 @@ dependencies:
   - unordered-containers
 
 library:
-  source-dirs: source
+  source-dirs: src
   ghc-options: -Wall
   exposed-modules:
     - NejlaCommon

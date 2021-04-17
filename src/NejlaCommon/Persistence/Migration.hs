@@ -64,7 +64,7 @@ setupMetaSchema =
     -- DB versioning not initialized
     True -> do
       $logInfo "Schema versioning not found. Initializing now."
-      P.rawExecute $(sqlFile "source/NejlaCommon/Persistence/sql/initialize_versioning.sql") []
+      P.rawExecute $(sqlFile "src/NejlaCommon/Persistence/sql/initialize_versioning.sql") []
     -- Schema versioning already installed
     False -> return ()
 
