@@ -94,6 +94,7 @@ tests:
       - QuickCheck
       - async
       - base
+      - exceptions
       - formatting
       - hspec-expectations
       - mtl

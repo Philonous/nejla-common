@@ -17,25 +17,26 @@
 
 module Persistent.Common where
 
-import Control.Concurrent
-import Control.Lens
-import Control.Monad
-import Control.Monad.Logger
-import Control.Monad.Reader
-import Control.Monad.Trans.Control
-import Data.ByteString             (ByteString)
-import Data.Default
-import Data.Singletons
-import Data.Singletons.Prelude.Ord
-import Data.Text                   (Text)
-import Database.Esqueleto          as E
-import Database.Persist.Postgresql
-import Database.Persist.TH
-import System.Environment
-import System.IO
-import UnliftIO                    (MonadUnliftIO)
+import           Control.Concurrent
+import           Control.Lens
+import           Control.Monad
+import qualified Control.Monad.Catch         as Ex
+import           Control.Monad.Logger
+import           Control.Monad.Reader
+import           Control.Monad.Trans.Control
+import           Data.ByteString             (ByteString)
+import           Data.Default
+import           Data.Singletons
+import           Data.Singletons.Prelude.Ord
+import           Data.Text                   (Text)
+import           Database.Esqueleto          as E
+import           Database.Persist.Postgresql
+import           Database.Persist.TH
+import           System.Environment
+import           System.IO
+import           UnliftIO                    (MonadUnliftIO)
 
-import NejlaCommon
+import           NejlaCommon
 
 share [ mkPersist sqlSettings
       , mkMigrate "migrateAll"
@@ -49,7 +50,7 @@ Foo
 |]
 
 connectionString :: ByteString
-connectionString = "dbname=nejlacommon-test"
+connectionString = "host=database dbname=nejlacommon-test user=postgres"
 
 run :: ( MonadIO m, MonadUnliftIO m
        , ('NejlaCommon.ReadCommitted <= level) ~ 'True) =>
@@ -82,11 +83,10 @@ withDB' debug (f :: ConnectionPool -> IO a) = do
     False -> runNoLoggingT go
     True -> runStderrLoggingT go
   where
-    go :: (MonadIO m, MonadLogger m, MonadUnliftIO m) => m a
+    go :: (MonadIO m, MonadLogger m, MonadUnliftIO m, Ex.MonadCatch m) => m a
     go = do
       withPostgresqlPool connectionString 3 $ \pool -> do
-        -- Setup database
-        run readCommitted 0 pool $ do
+        runPoolRetry pool $ do
           resetDB
           runMigrationSilent migrateAll
           _ <- insert Foo { fooClass = 1, fooValue = 3}
@@ -130,17 +130,16 @@ takeBaton :: MonadIO m => Baton -> m ()
 takeBaton baton = liftIO $ do
   takeMVar $ we baton
 
-yieldBaton :: MonadIO m => Baton -> m ()
-yieldBaton baton = liftIO $ do
+passBaton :: MonadIO m => Baton -> m ()
+passBaton baton = liftIO $ do
   putMVar (them baton) ()
 
-passBaton :: MonadIO m => Baton -> m ()
-passBaton baton = do
-  yieldBaton baton
-  takeBaton baton
-
+-- | A mutex with two handles. Yielding the mutex (passing the baton) allows the
+-- other thread to run until the baton is passed back
+--
+-- Initially, neither handle holds the baton (start by passBaton to one of them)
 mkBatons :: MonadIO m => m (Baton, Baton)
 mkBatons = liftIO $ do
-  sem1 <- newMVar ()
+  sem1 <- newEmptyMVar
   sem2 <- newEmptyMVar
   return (Baton 1 sem1 sem2, Baton 2 sem2 sem1)
