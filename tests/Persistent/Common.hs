@@ -26,12 +26,16 @@ import           Control.Monad.Reader
 import           Control.Monad.Trans.Control
 import           Data.ByteString             (ByteString)
 import           Data.Default
+import           Data.IORef
 import           Data.Singletons
 import           Data.Singletons.Prelude.Ord
 import           Data.Text                   (Text)
+import qualified Data.Text                   as Text
+import qualified Data.Text.Encoding          as Text
 import           Database.Esqueleto          as E
 import           Database.Persist.Postgresql
 import           Database.Persist.TH
+import qualified Database.PostgreSQL.Simple  as Postgres
 import           System.Environment
 import           System.IO
 import           UnliftIO                    (MonadUnliftIO)
@@ -49,8 +53,8 @@ Foo
   deriving Eq Show
 |]
 
-connectionString :: ByteString
-connectionString = "host=database dbname=nejlacommon-test user=postgres"
+defaultConnectionString :: ByteString
+defaultConnectionString = "host=localhost port=5432 dbname=postgres user=postgres"
 
 run :: ( MonadIO m, MonadUnliftIO m
        , ('NejlaCommon.ReadCommitted <= level) ~ 'True) =>
@@ -65,7 +69,6 @@ run lvl i pool m = liftIO
   where
     conf :: SqlConfig
     conf = def & numRetries .~ i
-
 
 withDB :: (ConnectionPool -> IO b) -> IO b
 withDB f = do
@@ -85,6 +88,10 @@ withDB' debug (f :: ConnectionPool -> IO a) = do
   where
     go :: (MonadIO m, MonadLogger m, MonadUnliftIO m, Ex.MonadCatch m) => m a
     go = do
+      mbConStr <- liftIO $ lookupEnv "TEST_DB_CONNECTION"
+      let connectionString = case mbConStr of
+                               Nothing -> defaultConnectionString
+                               Just str -> Text.encodeUtf8 (Text.pack str)
       withPostgresqlPool connectionString 3 $ \pool -> do
         runPoolRetry pool $ do
           resetDB
@@ -143,3 +150,27 @@ mkBatons = liftIO $ do
   sem1 <- newEmptyMVar
   sem2 <- newEmptyMVar
   return (Baton 1 sem1 sem2, Baton 2 sem2 sem1)
+
+-- | Restart the transaction by throwing a re-tryeable SQL-error
+restart :: App () Privileged NejlaCommon.ReadCommitted a
+restart = do
+  Ex.throwM $
+    Postgres.SqlError
+    { Postgres.sqlState       = "40001" -- SerializationFailure, should lead to restart
+    , Postgres.sqlExecStatus  = Postgres.NonfatalError
+    , Postgres.sqlErrorMsg    = "Test: restart"
+    , Postgres.sqlErrorDetail = "Test: Error thrown to restart transaction"
+    , Postgres.sqlErrorHint   = mempty
+    }
+
+withRestarts :: MonadIO m =>
+  Int
+  -> (App () 'Privileged 'NejlaCommon.ReadCommitted () -> m b)
+  -> m b
+withRestarts count f = do
+  countRef <- liftIO $ newIORef count
+  f $ restartIf countRef
+  where
+    restartIf ref = do
+      count <- liftIO $ atomicModifyIORef ref (\x -> if x > 0 then (x-1, x) else (x, x))
+      when (count > 0) restart

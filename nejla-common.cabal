@@ -3,6 +3,8 @@ cabal-version: 1.12
 -- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
+--
+-- hash: 1a73e98529397f37d255ef07826225e5cdd11218119677ab65428c10fc08d8c6
 
 name:           nejla-common
 version:        0.1.0.0
@@ -107,6 +109,7 @@ test-suite tests
       Logstash
       Persistent
       Persistent.Common
+      Persistent.DelayedIO
       Persistent.Serializable
       Paths_nejla_common
   hs-source-dirs:
@@ -123,6 +126,7 @@ test-suite tests
     , containers
     , data-default
     , esqueleto
+    , exceptions
     , fast-logger
     , formatting
     , hspec-expectations

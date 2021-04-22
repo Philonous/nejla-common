@@ -9,7 +9,8 @@ services:
     build:
       context: .
     environment:
-      DB_HOST: database
+      TEST_DB_CONNECTION: "host=database dbname=postgres user=postgres"
+      # DEBUG: TRUE
     volumes:
       - ./dist/tests:/tests:ro
     networks:
@@ -22,7 +23,7 @@ services:
     image: postgres:10
     environment:
       - POSTGRES_HOST_AUTH_METHOD=trust
-      - POSTGRES_DB=nejlacommon-test
+      - POSTGRES_DB=postgres
     networks:
       - nejla-common-testing
     command: -c "fsync=off" -c "synchronous_commit=off" -c "full_page_writes=off"
