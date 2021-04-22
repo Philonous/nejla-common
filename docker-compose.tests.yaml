@@ -1,0 +1,32 @@
+# Docker container necessary to run the test suite.
+#
+# docker-compose -f docker-compose.testing.yaml
+
+version: '3.4'
+
+services:
+  test:
+    build:
+      context: .
+    environment:
+      TEST_DB_CONNECTION: "host=database dbname=postgres user=postgres"
+      # DEBUG: TRUE
+    volumes:
+      - ./dist/tests:/tests:ro
+    networks:
+      nejla-common-testing:
+    links:
+      - database
+    command: sh -ec 'for t in /tests/*; do $$t; done'
+  database:
+    container_name: nejla-common_testing-database
+    image: postgres:10
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
+      - POSTGRES_DB=postgres
+    networks:
+      - nejla-common-testing
+    command: -c "fsync=off" -c "synchronous_commit=off" -c "full_page_writes=off"
+
+networks:
+  nejla-common-testing:

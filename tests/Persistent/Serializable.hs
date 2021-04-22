@@ -22,7 +22,10 @@ import           Test.Tasty
 import           Test.Tasty.HUnit
 import           Test.Tasty.TH
 
-import NejlaCommon
+import           Control.Exception          (throw)
+import qualified Control.Monad.Catch        as Ex
+import           NejlaCommon
+import Data.Typeable (typeOf)
 
 --------------------------------------------------------------------------------
 -- Serialization failure -------------------------------------------------------
@@ -36,14 +39,27 @@ serializableError :: MonadIO m =>
                   -> ConnectionPool
                   -> m ()
 serializableError retry pool = do
+    -- "Baton" is a
     (b1, b2) <- mkBatons
     liftIO $ withAsync (thread1 b1) $ \a1 -> do
       link a1
       withAsync (thread2 b2) $ \a2 -> do
         link a2
+        passBaton b2 -- This gives the baton to b1!
+
+        -- Thread 1 will fail with a serialization error, since thread 2 "sneaks
+        -- in"
+        -- If we don't allow retries, we just jump out of here with an exception
+        -- Otherwise thread 1 will start again
         _ <- wait a2
-        yieldBaton b2
+        -- Now thread 2 is finished and thread 1 can try again. We need to keep
+        -- passing it the baton so it can make progress (since thread 1 isn't
+        -- there to do it any more)
         passBaton b2
+        takeBaton b2
+        passBaton b2
+
+        -- Thread 1 can now succeed
         _ <- wait a1
         return ()
     return ()
@@ -51,25 +67,35 @@ serializableError retry pool = do
   where
     retries = if retry then 1 else 0
     runThread f = run serializable retries pool f
+    -- This thread fails with a serialization error
     thread1 baton = runThread $ do
       takeBaton baton
       s <- getSum 1
       passBaton baton
+      -- Here thread two changes the data we just read, leading to a
+      -- serialization anomaly
+      takeBaton baton
       _ <- insert Foo {fooClass = 2, fooValue = round s}
       commit
-      yieldBaton baton
+      passBaton baton
     thread2 baton = runThread $ do
       takeBaton baton
       s <- getSum 2
       _ <- insert Foo {fooClass = 1, fooValue = round s}
       commit
-      yieldBaton baton
+      passBaton baton
 
 -- | Check that we really are producing a serialization failure
 case_serializable_error :: IO ()
 case_serializable_error =
-  (withDB  $ serializableError False)
-            `shouldThrow` (\e -> Postgres.sqlState e == "40001")
+  withDB (serializableError False)
+            `shouldThrow` (\(ExceptionInLinkedThread _ mbE) ->
+                              case Ex.fromException mbE of
+                                Just (DBError mbPgError)
+                                  |  Just e <- Ex.fromException mbPgError
+                                    -> Postgres.sqlState e == "40001"
+                                _ -> throw mbE
+                          )
 
 -- | Check that we successfully retry the transaction when a serialization
 -- failure occurs

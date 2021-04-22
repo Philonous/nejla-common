@@ -13,9 +13,9 @@ build:
 
   parallel:
     matrix:
-      - stack_yaml:
-        - stack.lts16.yaml
-        - stack.lts17.yaml
+      - resolver:
+        - lts16
+        - lts17
 
   artifacts:
     paths:

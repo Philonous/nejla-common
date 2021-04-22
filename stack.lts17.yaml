@@ -10,3 +10,7 @@ nix:
   packages:
     - zlib
     - postgresql
+
+docker:
+  enable: false
+  image: nejla/haskell-build

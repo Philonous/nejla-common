@@ -9,7 +9,7 @@ import qualified Config as Config
 
 tests = testGroup "tests" [ Persistent.tests
                           , Logging.tests
-                          , Logstash.tests
+                          -- , Logstash.tests
                           , Config.tests
                           ]
 

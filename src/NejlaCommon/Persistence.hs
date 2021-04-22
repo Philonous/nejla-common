@@ -35,6 +35,7 @@ module NejlaCommon.Persistence
   , askState
   , viewState
   , App (..)
+  , delayIO
   , unprivileged
   , db
   , db'
@@ -142,6 +143,7 @@ import           Data.Data
 import           Data.Default
 import qualified Data.Foldable                     as Foldable
 import qualified Data.Function                     as Function
+import           Data.IORef
 import qualified Data.List                         as List
 import           Data.Maybe                        (catMaybes, maybeToList)
 import qualified Data.Ord                          as Ord
@@ -228,6 +230,8 @@ data AppState st = AppState { appStateConnection :: !SqlBackend
                             -- ^ Pool of SQL connections
                             , appStateUserState  :: !st
                             -- ^ User state
+                            , appStateDelayedIO :: !(IORef (IO ()))
+                            -- ^ IO action to be run after the transaction commits
                             } deriving ( Typeable, Generic)
 
 L.makeLensesWith L.camelCaseFields ''AppState
@@ -253,6 +257,13 @@ viewState :: L.Getting a st a -> App st r l a
 viewState f = App . L.view $ userState . f
 
 -- | An App action running in a privilege context @r@ with transaction level @l@
+--
+-- Note that actions in this monad can be _retried_ on certain errors
+-- (e.g. serialization failures) or rolled back completely (when the transaction
+-- fails). So make sure that any IO action you are running via liftIO can deal
+-- with this.
+--
+-- If you want to run an action only after the transaction commits, use 'delayIO'
 newtype App (st :: *) (r :: Privilege) (l :: TransactionLevel)
             a = App {unApp :: ReaderT (AppState st) IO a}
                    deriving (Functor, Applicative, Monad, MonadFail, MonadIO
@@ -331,14 +342,16 @@ runApp :: Sing l -- ^ mode to run the transaction in (see 'serializable',
        -> st -- ^ User state to pass along
        -> App st p l a
        -> IO a
-runApp tLevel conf pool ust ((App m) :: App st p l a) =
-  flip E.runSqlPool pool $ do
+runApp tLevel conf pool ust ((App m) :: App st p l a) = do
+  delayedRef <- newIORef (return ())
+  res <- flip E.runSqlPool pool $ do
     when (conf L.^. useTransactionLevels) $
       setTransactionLevel (fromSing tLevel)
     con <- ask
     let st = AppState { appStateConnection = con
                       , appStatePool = pool
                       , appStateUserState = ust
+                      , appStateDelayedIO = delayedRef
                       }
     liftIO $ Ex.catch (go con st $ conf L.^. numRetries) $
       \e -> case constraintViolation e of
@@ -347,10 +360,14 @@ runApp tLevel conf pool ust ((App m) :: App st p l a) =
               Just (CheckViolation relation constr) ->
                 Ex.throwM (ForeignKey (utf8 relation) (utf8 constr))
               Just (NotNullViolation column) ->
-                Ex.throwM (ForeignKey ("not null") (utf8 column))
+                Ex.throwM (ForeignKey "not null" (utf8 column))
               Just (UniqueViolation column) ->
                 Ex.throwM (Conflict (utf8 column) [])
               _ -> Ex.throwM $ DBError (Ex.SomeException e)
+  after <- atomicModifyIORef delayedRef
+           (\after -> (error "delayedRef: Already executed", after))
+  after
+  return res
   where
     utf8 = Text.decodeUtf8With Text.lenientDecode
     go con st retries = do
@@ -360,6 +377,8 @@ runApp tLevel conf pool ust ((App m) :: App st p l a) =
                && retries > 0
             of
             True -> do
+              -- Forget delayed IO actions before we restart the transaction
+              atomicModifyIORef (appStateDelayedIO st) (\_ -> (return (), ()))
               delay <- randomRIO ( conf L.^. retryMinDelay
                                  , conf L.^. retryMaxDelay)
               threadDelay delay
@@ -389,6 +408,14 @@ runApp' :: SingI l =>
         -> IO a
 runApp' = runApp sing
 
+-- | Run an IO action after the current transaction commits.
+--
+-- The IO action is run at most once, even if the transaction is restarted
+-- The action is skipped if the transaction fails
+delayIO :: IO () -> App st p l ()
+delayIO m = App $ do
+  delayedRef <- asks appStateDelayedIO
+  liftIO $ atomicModifyIORef' delayedRef (\later -> (later >> m,()))
 
 -- | Run any operation in a privileged context
 unprivileged :: App st p l a -> App st 'Privileged l a
@@ -415,7 +442,7 @@ withLevel (App m) = App m
 -- | Annotate or upgrade an operation as working in Read Committed mode
 withReadCommitted :: App st p 'ReadCommitted a
                   -> App st p 'ReadCommitted a
-withReadCommitted (App m) = (App m)
+withReadCommitted (App m) = App m
 
 -- | Annotate or upgrade an operation as requiring Repeatable Read
 withRepeatableRead :: ((l <= 'RepeatableRead) ~ 'True) =>
@@ -432,11 +459,18 @@ forkApp :: App st p r a -> App st p r (Async a)
 forkApp (App m) = do
   st <- App ask
   let thread = do
+        delayedRef <- newIORef (return ())
         -- Grab a new connection so we don't leak the current one
-        flip E.runSqlPool (appStatePool st) $ do
+        res <- flip E.runSqlPool (appStatePool st) $ do
           con <- ask
-          let st' = st {appStateConnection = con}
+          let st' = st { appStateConnection = con
+                       , appStateDelayedIO = delayedRef
+                       }
           liftIO $ runReaderT m st'
+        after <- atomicModifyIORef delayedRef
+          (\after -> (error "delayedRef: Already executed", after))
+        after
+        return res
   liftIO $ async thread
 
 --------------------------------------------------------------------------------

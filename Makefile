@@ -1,24 +1,33 @@
-ifeq ($(origin stack_args),undefined)
-export stack_args := --colour=auto
+ifeq (${TERM},dumb)
+stack_args += --colour=never
 endif
 
-ifeq ($(origin stack_yaml),undefined)
-export stack_yaml := stack.lts17.yaml
+ifeq ($(origin stack_build_on),undefined)
+stack_build_on := host
 endif
 
+# Build on docker, not host
+ifeq ($(stack_build_on), docker)
+stack_args += --work-dir .stack-work.docker --docker --no-nix --docker-stack-exe download --install-ghc
+endif
+
+ifeq ($(origin resolver),undefined)
+resolver := lts17
+endif
+
+stack_yaml = stack.$(resolver).yaml
 stack = stack --stack-yaml $(stack_yaml)
 
-ifeq (${TERM},dumb)
-export stack_build_args := ${stack_build_args} --colour=never
-endif
-
-# When developing, we want to check that all lts build
+srcfiles := $(shell find src -type f)
+test-srcfiles := $(shell find tests -type f)
 
 .PHONY: all
-all: dist-lts16 dist-lts17
+all: dist
 
-dist-%: stack_yaml=stack.$*.yaml
-dist-%:
+dist: dist-$(resolver)
+	ln -sfT dist-$(resolver) dist
+
+dist-$(resolver): $(srcfiles) $(test-srcfiles) package.yaml stack.yaml
 	rm -f *.cabal
 	rm -f stack.*.yaml.lock
 	$(stack) build --install-ghc \
@@ -50,15 +59,45 @@ build:
 doc: build
 	xdg-open dist/doc/index.html
 
+tests := $(addprefix dist-$(resolver)/tests/, $(shell stack ide targets --stdout | grep ':test:' | cut -d ':' -f3))
+
+.PHONY: check
+chcek: test
+
+testimage:
+	docker-compose -f docker-compose.tests.yaml build
+	touch testimage
+
+.PHONY: test
+test: override stack_build_on:=docker
+test: $(tests) testimage
+	docker-compose -f docker-compose.tests.yaml run --rm test
+	docker-compose -f docker-compose.tests.yaml down -v
+
+.PHONY: test-down
+test-down:
+	docker-compose -f docker-compose.tests.yaml down -v
+
+# Only run tests for the current resolver for now
+$(tests): override stack_args := --work-dir .stack-work.docker --docker --no-nix --docker-stack-exe download --install-ghc
+$(tests): dist-$(resolver)/tests/%: $(srcfiles) $(test-srcfiles) package.yaml stack.yaml
+# Rebuild, since we always want to use docker
+	rm -f *.cabal
+	rm -f stack.*.yaml.lock
+	stack build $(stack_args) \
+	      	 --test --no-run-tests
+	mkdir -p dist-$(resolver)/tests
+	cp "$(shell stack $(stack_args) path --dist-dir)/build/$(notdir $@)/$(notdir $@)" dist-$(resolver)/tests/
+	ln -sfT dist-$(resolver) dist
+
+
+
 
 .PHONY: clean
 clean:
 	$(stack) clean
 	rm -rf *.cabal
-	rm -f stack.yaml.lock
-	rm -rf .stack-work
+	rm -f stack*.yaml.lock
+	rm -rf .stack-work*
 	rm -rf dist-*
 	rm -rf dist
-
-.PHONY: test
-test: build
