@@ -3,7 +3,7 @@ stack_args += --colour=never
 endif
 
 ifeq ($(origin stack_build_on),undefined)
-stack_build_on := docker
+stack_build_on := host
 endif
 
 # Build on docker, not host
