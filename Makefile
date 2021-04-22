@@ -18,7 +18,7 @@ endif
 stack_yaml = stack.$(resolver).yaml
 stack = stack --stack-yaml $(stack_yaml)
 
-srcfiles := $(shell find source -type f)
+srcfiles := $(shell find src -type f)
 test-srcfiles := $(shell find tests -type f)
 
 .PHONY: all
