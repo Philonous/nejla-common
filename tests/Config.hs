@@ -1,38 +1,37 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+
 module Config where
 
-import           Control.Monad.Logger
+import Control.Monad.Logger
 import qualified Data.Char as Char
-import           Data.Configurator as Conf
-import           Data.Monoid
-import           Data.Text (Text)
+import Data.Configurator as Conf
+import Data.Monoid
+import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Lazy as LText
 import qualified Data.Text.Lazy.IO as LText
-import           Formatting
-import           System.Environment
-import           System.IO
+import Formatting
+import NejlaCommon.Config
+import System.Environment
+import System.IO
 import qualified System.IO.Temp as Temp
-
-import           Test.QuickCheck
-import           Test.QuickCheck.Monadic
-import           Test.Tasty
-import           Test.Tasty.TH
-import           Test.Tasty.HUnit (testCase)
-import           Test.Tasty.QuickCheck
-
-import           NejlaCommon.Config
+import Test.QuickCheck
+import Test.QuickCheck.Monadic
+import Test.Tasty
+import Test.Tasty.HUnit (testCase)
+import Test.Tasty.QuickCheck
+import Test.Tasty.TH
 
 --------------------------------------------------------------------------------
 -- Conf file -------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
 mkConfig :: String -> LText.Text
-mkConfig = format ("testing{\n  value = "% string %" \n}")
+mkConfig = format ("testing{\n  value = " % string % " \n}")
 
-withConf :: FilePath -> String ->  (Config -> IO b) -> IO b
+withConf :: FilePath -> String -> (Config -> IO b) -> IO b
 withConf confFile value f = do
   let c = mkConfig value
   LText.writeFile confFile $ mkConfig value
@@ -66,16 +65,20 @@ instance Arbitrary Text where
   arbitrary = Text.pack <$> arbitrary
   shrink = map Text.pack . shrink . Text.unpack
 
-test :: (Show s, Show t, Arbitrary t) =>
-        (t -> String) -- ^ How the value should be rendered to a String for
-                      -- storage in the conf file
-     -> (t -> String) -- ^ How the value should be rendered to a String for
-                      -- storage in the env variable
-     -> (String -> Text -> Either Text t -> Config -> LoggingT IO s)
-     -- ^ The config retrieval function to test
-     -> (s -> t -> Bool) -- ^ How the returned value should be compared to the
-                         -- original value (in case of maybe etc)
-     -> IO ()
+test ::
+  (Show s, Show t, Arbitrary t) =>
+  -- | How the value should be rendered to a String for
+  -- storage in the conf file
+  (t -> String) ->
+  -- | How the value should be rendered to a String for
+  -- storage in the env variable
+  (t -> String) ->
+  -- | The config retrieval function to test
+  (String -> Text -> Either Text t -> Config -> LoggingT IO s) ->
+  -- | How the returned value should be compared to the
+  -- original value (in case of maybe etc)
+  (s -> t -> Bool) ->
+  IO ()
 test toConf toEnv getter checkGetter = withConfFile $ \filename -> do
   quickCheck $ \v' -> monadicIO $ do
     -- Config File
@@ -90,9 +93,9 @@ test toConf toEnv getter checkGetter = withConfFile $ \filename -> do
     -- assert (checkGetter res2 v')
     return ()
   where
-    get conf = runStderrLoggingT
-                $ getter envName "testing.value" (Left "value") conf
-
+    get conf =
+      runStderrLoggingT $
+        getter envName "testing.value" (Left "value") conf
 
 case_readable_integer_list :: IO ()
 case_readable_integer_list = test shw shw getConf' (==)
