@@ -1,6 +1,4 @@
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -16,9 +14,7 @@ import           Control.Monad.Catch     as Ex
 import           Control.Monad.Logger
 import           Control.Monad.Trans
 import           Data.Aeson              as Aeson
-import qualified Data.Configurator       as Conf
 import qualified Data.Configurator.Types as Conf
-import           Data.Monoid
 import           Data.Text               (Text)
 import qualified Data.Text               as Text
 import qualified Data.Text.Lazy          as LText
@@ -84,7 +80,7 @@ setEmailConf conf =
                 | (prg:args) <- Text.splitOn " " cmd
                 , not (Text.null prg) ->
                   SendmailConfig
-                  { sendmailConfigPath = Text.unpack $ prg
+                  { sendmailConfigPath = Text.unpack prg
                   , sendmailConfigArguments = Text.unpack <$> args
                   }
               _ -> defaultSendmailConfig
@@ -120,7 +116,7 @@ renderMsmtprc cfg tls auth =
   in case Mustache.renderMustacheW template dt of
        ([], txt) -> return txt
        (warnings, _) -> do
-         $logError $ "Could not render msmtprc: " <> (Text.pack $ show warnings)
+         $logError $ "Could not render msmtprc: " <> Text.pack (show warnings)
          liftIO Exit.exitFailure
   where
     template = [mustache|

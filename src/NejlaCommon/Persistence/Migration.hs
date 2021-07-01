@@ -123,7 +123,7 @@ findMigration revision v ms@(Migration{..}:mss)
   | v == expect = runMigrations revision v ms
   | otherwise = findMigration revision v mss
 findMigration _r v _ = do
-  $logError $ "Unknown schema version " <> (fromMaybe "<None>" v)
+  $logError $ "Unknown schema version " <> fromMaybe "<None>" v
   liftIO exitFailure
 
 runMigrations :: Text -> Maybe SchemaVersion -> [Migration] -> M ()

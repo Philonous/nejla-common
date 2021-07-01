@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -32,7 +31,6 @@ import qualified Data.List                        as List
 import           Data.Map.Strict                  (Map)
 import qualified Data.Map.Strict                  as Map
 import           Data.Maybe                       (fromMaybe)
-import           Data.Ord
 import           Data.String.Interpolate.IsString (i)
 import           Data.Text                        (Text)
 import           Data.Time.Clock                  (getCurrentTime)
@@ -87,7 +85,7 @@ backendWithStats (Foldl.Fold fadd fempty fextract) con k = do
   unhookedStatements <- liftIO $ newIORef =<< readIORef (P.connStmtMap con)
 
   -- Hook all existing statements
-  liftIO $ modifyIORef' (P.connStmtMap con) $ itraversed %@~ (hookedStatement update)
+  liftIO $ modifyIORef' (P.connStmtMap con) $ itraversed %@~ hookedStatement update
 
   -- Add hooking to newly created statements
   let prepare statementText = do
@@ -115,9 +113,9 @@ backendWithStats (Foldl.Fold fadd fempty fextract) con k = do
               -> m a
               -> m a
     withStats addSample stmt f = do
-      before <- liftIO $ Time.getCurrentTime
+      before <- liftIO Time.getCurrentTime
       res <- f
-      after <- liftIO $ Time.getCurrentTime
+      after <- liftIO Time.getCurrentTime
       let tdiff = after `Time.diffUTCTime` before
       liftIO $ addSample (QueryTime{queryTimeQuery = stmt
                                    , queryTimeTime = tdiff
@@ -163,22 +161,22 @@ foldStats  = Foldl.groupBy (view query) . lmap (view time) $ do
 logQueryStats :: (MonadIO m, MonadLogger m)
               => Text -- ^ Endpoint
               -> Bool -- Break down stats by query
-              -> (Map Text Stats)
+              -> Map Text Stats
               -> m ()
 logQueryStats endpoint breakdown stats = do
-  now <- liftIO $ getCurrentTime
+  now <- liftIO getCurrentTime
   let tCount = sumOf (each . count) stats
       tUnique = Map.size stats
       tTime = sumOf (each . totalTime) stats
       tTimePerQuery = if tCount > 0
-                      then tTime / (fromIntegral tCount)
+                      then tTime / fromIntegral tCount
                       else  0
       tLongestQuery = fromMaybe 0 $ maximumOf (each . maxTime) stats
   when breakdown $ do
-    let queries = List.sortBy (comparing $ view (_2 . totalTime))
+    let queries = List.sortOn (view (_2 . totalTime))
                     $ Map.toList stats
 
-    forM_ (queries) $ \(query, stat) -> do
+    forM_ queries $ \(query, stat) -> do
       Log.logDebugNS "SQL-stats" $ "  > " <> query
       Log.logDebugNS "SQL-stats" [i| Ran #{stat ^. count} times, total=#{stat ^. totalTime}, max=#{stat ^. maxTime})|]
   Log.logInfoNS "SQL-stats" [i|{"request":#{Aeson.encode endpoint}, "timestamp": #{Aeson.encode now}, "queries":#{tCount}, "unique":#{tUnique}, "totalTime":#{tDiff tTime}, "avgTime":#{tDiff tTimePerQuery}, "maxTime":#{tDiff tLongestQuery}}|]
@@ -193,8 +191,8 @@ logSqlStatistics :: Text -- ^ Context to log (e.g. the request endpoint)
                  -> App priv tl st a
                  -> App priv tl st a
 logSqlStatistics ctx (NC.App m) = do
-  st <- NC.App $ ask
+  st <- NC.App ask
   backendWithStats foldStats (st ^. NC.connection) (\getStats con ->
-    (NC.App $ ReaderT $ \_ -> runReaderT m (st & NC.connection .~ con))
-    `Ex.finally` ( logQueryStats ctx True =<< liftIO getStats)
+    NC.App (ReaderT $ \ _ -> runReaderT m (st & NC.connection .~ con))
+    `Ex.finally` (logQueryStats ctx True =<< liftIO getStats)
                                                    )

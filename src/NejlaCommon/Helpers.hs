@@ -9,7 +9,6 @@ import           Data.Char
 import           Data.HashMap.Strict        (HashMap)
 import qualified Data.HashMap.Strict        as HMap
 import qualified Data.List                  as List
-import           Data.Monoid
 import           Data.Text                  (Text)
 import qualified Data.Text                  as Text
 import qualified Data.Text.Lazy             as LText
@@ -56,8 +55,8 @@ cctu delim = go
       | isUpper c1 && isUpper c2 && isLower c3 =
           [toLower c1] ++ delim ++ [toLower c2] ++ go cs
     go (c1 : cs@(c2:_))
-      | (not $ isUpper c1) && isUpper c2 = [c1] ++ delim ++ go cs
-      | otherwise = [toLower c1] ++ go cs
+      | not (isUpper c1) && isUpper c2 = [c1] ++ delim ++ go cs
+      | otherwise = toLower c1:go cs
 
 -- | Remove a prefix from a String, throwing an error of the prefix is not found
 withoutPrefix :: String -- ^ Prefix to remove
@@ -104,7 +103,7 @@ defaultReplacements = HMap.fromList
 -- replacements
 camelCaseFieldsReplacing :: HashMap String String -> LensRules
 camelCaseFieldsReplacing replacements = camelCaseFields & lensField %~
-                   (\lf -> \typeName fieldNames fieldName ->
+                   (\lf typeName fieldNames fieldName ->
                               substNames <$> lf typeName fieldNames fieldName)
   where
     substNames (TopName name) = TopName (fixName replacements name)

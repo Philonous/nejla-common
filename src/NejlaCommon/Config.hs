@@ -21,7 +21,6 @@ import qualified Data.Char as Char
 import qualified Data.Configurator as Conf
 import qualified Data.Configurator.Types as Conf
 import           Data.Maybe (catMaybes)
-import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as Text
 import           System.Environment
@@ -67,7 +66,7 @@ getConfGeneric fromString env confName mbDefault conf = do
                                  <> " Set environment variable "
                                  <> Text.pack env <>
                                  " or configuration variable " <> confName <> "."
-                     liftIO $ Exit.exitFailure
+                     liftIO Exit.exitFailure
      Just v -> return v
 
 -- | Get configuration option based on Read instance

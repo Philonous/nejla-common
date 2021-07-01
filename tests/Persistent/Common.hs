@@ -82,9 +82,9 @@ withDB' :: Bool
         -> (ConnectionPool -> IO a)
         -> IO a
 withDB' debug (f :: ConnectionPool -> IO a) = do
-  case debug of
-    False -> runNoLoggingT go
-    True -> runStderrLoggingT go
+  if debug
+    then runStderrLoggingT go
+    else runNoLoggingT go
   where
     go :: (MonadIO m, MonadLogger m, MonadUnliftIO m, Ex.MonadCatch m) => m a
     go = do

@@ -25,7 +25,7 @@ loggingToChan bound m = do
         -- Drop oldest log line when channel is full
         full <- isFullTBChan chan
         when full $ void $ readTBChan chan
-        writeTBChan chan $ (fromLogStr $ defaultLogStr loc src lvl str)
+        writeTBChan chan $ fromLogStr (defaultLogStr loc src lvl str)
     dumpLogs chan = do
       atomically (untilM (readTBChan chan) (isEmptyTBChan chan))
     untilM m p = do

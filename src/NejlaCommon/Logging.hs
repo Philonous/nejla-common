@@ -34,13 +34,11 @@ import           Data.Text                (Text)
 import qualified Data.Text                as Text
 import qualified Data.Text.Encoding       as Text
 import qualified Data.Text.Encoding.Error as Text
-import qualified Data.Text.IO             as Text
 import           Data.Time.Clock          ( UTCTime, getCurrentTime )
 import           GHC.Generics
 import qualified Network.HTTP.Types       as HTTP
 import qualified Network.Wai              as Wai
 import qualified Network.Wai.Handler.Warp as Warp
-import           System.IO
 import qualified System.Log.FastLogger    as FastLogger
 import qualified System.Process           as Process
 
@@ -272,7 +270,7 @@ logHttpCalls logRequest app request' respond = do
                 return  bd
         return (rBody, if BS.null body then Nothing else Just body)
     let request = request'{Wai.requestBody = reqB}
-    rr <- app request $ \response -> do
+    app request $ \response -> do
         body <- responseToText response
         now <- getCurrentTime
         let reqLog =
@@ -287,8 +285,8 @@ logHttpCalls logRequest app request' respond = do
                   HTTP.statusCode $ Wai.responseStatus response
               , requestLogResponseHeaders = toLogHeaders $ Wai.responseHeaders response
               , requestLogResponseBody = body
-              , requestLogIP = bst <$> (List.lookup "X-Real-IP"
-                                         $ Wai.requestHeaders request)
+              , requestLogIP = bst <$> List.lookup "X-Real-IP"
+                                         (Wai.requestHeaders request)
               }
 
             logRow =
@@ -301,7 +299,6 @@ logHttpCalls logRequest app request' respond = do
               }
         logRequest logRow
         respond response
-    return rr
   where
     getBody nextChunk acc = do
         chunk <- nextChunk

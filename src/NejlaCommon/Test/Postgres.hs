@@ -22,6 +22,7 @@ import qualified Control.Monad.Catch               as Ex
 import           Control.Monad.Logger
 import           Control.Monad.Reader
 import qualified Data.ByteString.Char8             as BS
+import           Data.Maybe
 import           Database.Persist.Sql              (SqlBackend, ConnectionPool)
 import qualified Database.PostgreSQL.Simple        as Postgres
 import           NejlaCommon.Persistence
@@ -29,15 +30,14 @@ import           NejlaCommon.Persistence.Migration
 import           Network.Wai                       (Application)
 import           System.Environment                (lookupEnv)
 import           System.IO                         (stderr)
-import           Test.Hspec                  ( Example(..), SpecWith
-                                             , beforeWith, aroundWith
+import           Test.Hspec                  ( SpecWith
+                                             , aroundWith
                                              , hspec
                                              )
 
 import qualified Database.Persist.Sql              as P
 
 import           Control.Monad.IO.Unlift           (MonadUnliftIO)
-import           Control.Monad.Trans.Control       (MonadBaseControl(..))
 import           NejlaCommon.Test.Logging          (loggingToChan)
 
 import qualified NejlaCommon.Persistence.Migration as Migration
@@ -164,9 +164,9 @@ specApi ci migration withMkApp spec =
       lift . hspec $ aroundWith ( \s () -> runLoggingT (do
         let s' st app = s ((pool, st), app) >> return TestDone
         -- Drain logs so we don't get logs from previous tests
-        _ <- liftIO $ getLogs
+        _ <- liftIO getLogs
         P.runSqlPool cleanDB pool
-        Ex.onException (withMkApp pool s') $ do
+        _ <- Ex.onException (withMkApp pool s') $ do
           liftIO (mapM_ (BS.hPutStrLn stderr) =<< getLogs)
         return ()
                                                 ) logFun
@@ -199,9 +199,7 @@ dbTestConnectInfo = do
   where
     getEnv name def = do
       mbE <- lookupEnv name
-      return $ case mbE of
-                 Nothing -> def
-                 Just e -> e
+      return $ fromMaybe def mbE
     getEnv' name def = do
       mbE <- lookupEnv name
       case mbE of
