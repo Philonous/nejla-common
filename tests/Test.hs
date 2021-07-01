@@ -2,10 +2,10 @@ module Main where
 
 import           Test.Tasty
 
-import qualified Persistent as Persistent
-import qualified Logging as Logging
-import qualified Logstash as Logstash
-import qualified Config as Config
+import qualified Persistent
+import qualified Logging
+import qualified Logstash
+import qualified Config
 
 tests = testGroup "tests" [ Persistent.tests
                           , Logging.tests

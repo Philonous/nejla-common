@@ -89,7 +89,7 @@ tests:
   tests:
     main: Test.hs
     source-dirs: tests
-    ghc-options: -threaded
+    ghc-options: -threaded -Wall
     dependencies:
       - QuickCheck
       - async

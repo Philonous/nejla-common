@@ -111,7 +111,7 @@ derivedType tname DD{ derivedPrefix = pre
                                                            , AppT (ConT ''Maybe)
                                                                   tp)
                   | (nm, _, tp) <- maybeFields' ]
-             cName' = (mkName $ uPre ++ nameBase name)
+             cName' = mkName (uPre ++ nameBase name)
              dt = DataD [] (mkName $ uPre <> nameBase cName) []
                           Nothing [RecC cName' (cs ++ ms)] derive
              fromFunName = mkName $ concat [ "from"

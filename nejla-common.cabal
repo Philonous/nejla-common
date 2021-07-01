@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 1a73e98529397f37d255ef07826225e5cdd11218119677ab65428c10fc08d8c6
+-- hash: c214c9d8538794f867f87963ba8d2b710d7acef53f58e4d6ed3bb62b9d720513
 
 name:           nejla-common
 version:        0.1.0.0
@@ -114,7 +114,7 @@ test-suite tests
       Paths_nejla_common
   hs-source-dirs:
       tests
-  ghc-options: -threaded
+  ghc-options: -threaded -Wall
   build-depends:
       HUnit
     , QuickCheck

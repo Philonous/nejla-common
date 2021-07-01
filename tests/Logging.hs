@@ -70,8 +70,8 @@ instance Arbitrary LogRow where
 --------------------------------------------------------------------------------
 
 prop_logRow_json_roundtrip :: LogRow -> Bool
-prop_logRow_json_roundtrip =
-  \logRow -> Aeson.decode (Aeson.encode logRow) == Just (logRow :: LogRow)
+prop_logRow_json_roundtrip logRow =
+  Aeson.decode (Aeson.encode logRow) == Just (logRow :: LogRow)
 
 
 --------------------------------------------------------------------------------
@@ -97,8 +97,8 @@ logTest1 :: LogTest
 logTest1 = LogTest { logTestTime    = Just log1TestTime
                    , logTestLevel   = LevelInfo
                    , logTestType    = "test"
-                   , logTestPayload = Aeson.object [ ("foo" Aeson..= False)
-                                                   , ("bar" Aeson..= True)
+                   , logTestPayload = Aeson.object [ "foo" Aeson..= False
+                                                   , "bar" Aeson..= True
                                                    ]
                    }
 case_log :: IO ()

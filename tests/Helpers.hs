@@ -16,22 +16,22 @@ import           Language.Haskell.TH
 
 import           NejlaCommon.Helpers
 
-prop_showText_safeRead_inverts = \(item :: Integer) ->
+prop_showText_safeRead_inverts (item :: Integer) =
   safeRead (Text.unpack $ showText item) == Just item
 
 
 prop_downcase :: String -> Bool
-prop_downcase = \str -> case (str, downcase str) of
+prop_downcase str = case (str, downcase str) of
   ([], []) -> True
-  (s:ss, d:dd) -> and [ not $ generalCategory d == UppercaseLetter
+  (s:ss, d:dd) -> and [ generalCategory d /= UppercaseLetter
                       , toLower s == d
                       , ss == dd
                       ]
 
 prop_upcase :: String -> Bool
-prop_upcase = \str -> case (str, upcase str) of
+prop_upcase str = case (str, upcase str) of
   ([], []) -> True
-  (s:ss, d:dd) -> and [ not $ generalCategory d == LowercaseLetter
+  (s:ss, d:dd) -> and [ generalCategory d /= LowercaseLetter
                       , toUpper s == d
                       , ss == dd
                       ]
@@ -47,16 +47,15 @@ instance Arbitrary UCLetter where
   shrink _ = []
 
 prop_cctu :: [Char] -> [Char] -> UCLetter -> [Char] -> Bool
-prop_cctu = \delim left' (UCLetter r) right' ->
+prop_cctu delim left' (UCLetter r) right' =
               let left = toLower <$> left'
                   right = r : (toLower <$> right')
-              in if left == "" || right == ""
-                 then True
-                 else cctu delim (left ++ right)
-                      == (left ++ delim ++ downcase right)
+              in or [ left == "" || right == ""
+                    , cctu delim (left ++ right)
+                      == (left ++ delim ++ downcase right) ]
 
 prop_without_prefix :: String -> [Char] -> Bool
-prop_without_prefix = \pre str -> withoutPrefix pre (pre ++ str) == str
+prop_without_prefix pre str = withoutPrefix pre (pre ++ str) == str
 
 tests :: TestTree
 tests = $testGroupGenerator

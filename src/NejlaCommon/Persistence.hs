@@ -13,8 +13,6 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -365,7 +363,7 @@ runApp tLevel conf pool ust ((App m) :: App st p l a) = do
                 Ex.throwM (Conflict (utf8 column) [])
               _ -> Ex.throwM $ DBError (Ex.SomeException e)
   after <- atomicModifyIORef delayedRef
-           (\after -> (error "delayedRef: Already executed", after))
+           (error "delayedRef: Already executed",)
   after
   return res
   where
@@ -373,17 +371,16 @@ runApp tLevel conf pool ust ((App m) :: App st p l a) = do
     go con st retries = do
         Ex.catch (liftIO $ runReaderT m st) $ \e -> do
           runReaderT E.transactionUndo con
-          case Postgres.sqlState e `elem` (conf L.^. retryableErrors)
+          if Postgres.sqlState e `elem` (conf L.^. retryableErrors)
                && retries > 0
-            of
-            True -> do
+            then do
               -- Forget delayed IO actions before we restart the transaction
-              atomicModifyIORef (appStateDelayedIO st) (\_ -> (return (), ()))
+              atomicModifyIORef (appStateDelayedIO st) (const (return (), ()))
               delay <- randomRIO ( conf L.^. retryMinDelay
                                  , conf L.^. retryMaxDelay)
               threadDelay delay
               go con st (retries -1)
-            False -> Ex.throwM e
+            else Ex.throwM e
 
 -- | Run the transaction in serializable mode
 serializable :: Sing 'Serializable
@@ -468,7 +465,7 @@ forkApp (App m) = do
                        }
           liftIO $ runReaderT m st'
         after <- atomicModifyIORef delayedRef
-          (\after -> (error "delayedRef: Already executed", after))
+          (error "delayedRef: Already executed",)
         after
         return res
   liftIO $ async thread
@@ -612,7 +609,6 @@ offsetLimit  :: Maybe Int
 offsetLimit os l = do
     Foldable.forM_ os $ offset . fromIntegral
     Foldable.forM_ l $ limit . fromIntegral
-    return ()
 
 type SV a  = SqlExpr (Entity a)
 type SVM a = SqlExpr (Maybe (Entity a))
@@ -834,7 +830,7 @@ withForeignPairs ::
              -> EntityField b f
              -> SqlExpr (Value Bool))
   -> SqlExpr (Value Bool)
-withForeignPairs f = andL . flip map (foreignPairs) $ \case
+withForeignPairs f = andL . flip map foreignPairs $ \case
   (ForeignPair xk yk) -> f xk yk
 
 -- | A foreign key constraint between two entities.
@@ -975,7 +971,7 @@ foreignEnts ents = merge $ do
     fromForeignRefs (ForeignRef x _ ) = pure $ unHaskellName x
     fromForeignRefs _ = mempty
     upcase' = upcase . Text.unpack
-    toField ent name = Text.unpack ent <> (upcase' name)
+    toField ent name = Text.unpack ent <> upcase' name
 
 -- | Automatically create ForeignKey instances
 mkForeignInstances :: [EntityDef] -> TH.Q [TH.Dec]
@@ -1049,7 +1045,7 @@ mkUniqueRandomHrID fromCandidate len field = do
     candidate <- liftIO $ mkRandomHrID len
     [Value rows] <- db . select . E.from $ \o -> do
         where_ $ o ^. field ==. val (fromCandidate candidate)
-        return $ E.countRows
+        return E.countRows
     if (rows :: Rational) > 0
         then mkUniqueRandomHrID fromCandidate len field
         else return $ fromCandidate candidate

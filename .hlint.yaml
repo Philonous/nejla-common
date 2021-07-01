@@ -1,0 +1,7 @@
+- ignore: { name: Replace case with maybe }
+- ignore: { name: Use join }
+- ignore: { name: Use && }
+- ignore: { name: Use || }
+- ignore: { name: Eta reduce, within: NejlaCommon.Test.Expectation.postJ }
+- ignore: { name: Eta reduce, within: NejlaCommon.Test.Expectation.putJ }
+- ignore: { name: Eta reduce, within: Logstash.docker }
