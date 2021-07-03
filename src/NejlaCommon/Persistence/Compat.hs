@@ -1,16 +1,17 @@
-{-# LANGUAGE CPP #-}
+-- | Compatibility shim for dealing with changing APIs
+
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE PatternSynonyms #-}
 
 #if MIN_VERSION_persistent(2,11,0)
 {-# LANGUAGE ViewPatterns #-}
 #endif
 
--- | Compatibility shim for dealing with changing APIs
 module NejlaCommon.Persistence.Compat where
 
-import Data.ByteString (ByteString)
-import Database.Persist
+import           Data.ByteString  (ByteString)
+import           Database.Persist
 
 -- Persistent 2.11 changed the type of FieldDef.fieldAttrs from Text to an ADT
 #if MIN_VERSION_persistent(2,11,0)

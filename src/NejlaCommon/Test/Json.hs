@@ -3,11 +3,11 @@
 
 module NejlaCommon.Test.Json where
 
-import qualified Data.Aeson as Aeson
+import qualified Data.Aeson           as Aeson
 import qualified Data.ByteString.Lazy as BSL
-import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
-import Test.Hspec.Wai.JSON
+import qualified Data.Text            as Text
+import qualified Data.Text.Encoding   as Text
+import           Test.Hspec.Wai.JSON
 
 -- | Newtype wrapper to handle endpoints that return JSON values
 newtype JSON = JSON Aeson.Value
