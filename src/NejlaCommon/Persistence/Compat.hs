@@ -22,6 +22,7 @@ hasFieldAttrMaybe :: [FieldAttr] -> Bool
 hasFieldAttrMaybe fs = FieldAttrMaybe `elem` fs
 #else
 import Data.Text (Text)
+import Database.Persist
 
 hasFieldAttrMaybe :: [Text] -> Bool
 hasFieldAttrMaybe fs = "Maybe" `elem` fs
