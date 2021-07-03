@@ -10,13 +10,13 @@
 module NejlaCommon.Persistence.Compat where
 
 import Data.ByteString (ByteString)
+
+-- Persistent 2.11 changed the type of FieldDef.fieldAttrs from Text to an ADT
+#if MIN_VERSION_persistent(2,11,0)
 import Database.Persist (
     FieldAttr (FieldAttrMaybe),
     PersistValue (PersistLiteral, PersistLiteralEscaped),
  )
-
--- Persistent 2.11 changed the type of FieldDef.fieldAttrs from Text to an ADT
-#if MIN_VERSION_persistent(2,11,0)
 
 hasFieldAttrMaybe :: [FieldAttr] -> Bool
 hasFieldAttrMaybe fs = FieldAttrMaybe `elem` fs
