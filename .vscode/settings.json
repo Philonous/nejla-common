@@ -1,7 +1,0 @@
-{
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
-  "editor.detectIndentation": false,
-  "editor.formatOnSave": true,
-  "editor.tabSize": 4,
-  "haskell.formattingProvider": "fourmolu"
-}
