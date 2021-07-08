@@ -296,11 +296,12 @@ instance MonadLoggerIO (App st r l) where
     return $ E.connLogFunc con
 
 data SqlConfig =
-  SqlConfig   -- | How often to retry the transaction (0 to
-              -- disable retries completely)
-              --
-              -- Default: 3
-  { sqlConfigNumRetries           :: !Int
+  SqlConfig
+  { -- | How often to retry the transaction (0 to
+    -- disable retries completely)
+    --
+    -- Default: 3
+    sqlConfigNumRetries           :: !Int
     -- | Minimum delay in µs before retrying (delay
     -- will be chosen from a uniform distribution
     -- between min and max)
