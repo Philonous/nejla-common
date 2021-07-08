@@ -7,11 +7,12 @@ import qualified Data.Aeson           as Aeson
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Text            as Text
 import qualified Data.Text.Encoding   as Text
+
 import           Test.Hspec.Wai.JSON
 
 -- | Newtype wrapper to handle endpoints that return JSON values
 newtype JSON = JSON Aeson.Value
-  deriving newtype (Eq)
+    deriving newtype ( Eq )
 
 instance Show JSON where
   show (JSON x) = Text.unpack . Text.decodeUtf8 . BSL.toStrict $ Aeson.encode x

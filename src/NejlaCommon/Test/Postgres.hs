@@ -1,10 +1,10 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- | Helpers to deal with Postgres in test suites
-
 module NejlaCommon.Test.Postgres
   ( Migrate
   , withTestDB
@@ -14,34 +14,33 @@ module NejlaCommon.Test.Postgres
   , specApi
   , ConnectInfo(..)
   , dbTestConnectInfo
-  )
-
-where
+  ) where
 
 import qualified Control.Monad.Catch               as Ex
+import           Control.Monad.IO.Unlift           ( MonadUnliftIO )
 import           Control.Monad.Logger
 import           Control.Monad.Reader
+
 import qualified Data.ByteString.Char8             as BS
 import           Data.Maybe
-import           Database.Persist.Sql              (SqlBackend, ConnectionPool)
+
+import           Database.Persist.Sql
+                 ( ConnectionPool, SqlBackend )
+import qualified Database.Persist.Sql              as P
 import qualified Database.PostgreSQL.Simple        as Postgres
+
 import           NejlaCommon.Persistence
 import           NejlaCommon.Persistence.Migration
-import           Network.Wai                       (Application)
-import           System.Environment                (lookupEnv)
-import           System.IO                         (stderr)
-import           Test.Hspec                  ( SpecWith
-                                             , aroundWith
-                                             , hspec
-                                             )
-
-import qualified Database.Persist.Sql              as P
-
-import           Control.Monad.IO.Unlift           (MonadUnliftIO)
-import           NejlaCommon.Test.Logging          (loggingToChan)
-
 import qualified NejlaCommon.Persistence.Migration as Migration
+import           NejlaCommon.Test.Logging          ( loggingToChan )
 
+import           Network.Wai                       ( Application )
+
+import           System.Environment                ( lookupEnv )
+import           System.IO                         ( stderr )
+
+import           Test.Hspec
+                 ( SpecWith, aroundWith, hspec )
 
 type Migrate = Migration.M ()
 
@@ -58,22 +57,23 @@ type Migrate = Migration.M ()
 -- >  conInfo <- getDBConnectInfo conf
 -- >  withTestDB conInfo 3 (mapM_ script migrations) $ \pool -> do
 -- >     «run tests...»
-withTestDB :: (MonadLoggerIO m, MonadUnliftIO m, Ex.MonadCatch m)
-           => ConnectInfo
-           -> Int -- ^ Maximum number of connections in the pool
-           -> Migration.M () -- ^ Migration to run once after connection is established
-           -> (ConnectionPool -> m a)
-           -> m a
-withTestDB ci cs doMigrate f =
-  withDBPool ci cs dbSetup $ \pool -> f pool
+withTestDB
+  :: (MonadLoggerIO m, MonadUnliftIO m, Ex.MonadCatch m)
+  => ConnectInfo
+  -> Int -- ^ Maximum number of connections in the pool
+  -> Migration.M () -- ^ Migration to run once after connection is established
+  -> (ConnectionPool -> m a)
+  -> m a
+withTestDB ci cs doMigrate f = withDBPool ci cs dbSetup $ \pool -> f pool
   where
     dbSetup :: Migration.M ()
     dbSetup = do
       resetDB
       doMigrate
       makeConstraintsDeferrable
-    resetDB = P.rawExecute
-      [sql|
+
+    resetDB =
+      P.rawExecute [sql|
         SET client_min_messages TO ERROR;
         DROP SCHEMA IF EXISTS _meta CASCADE;
         DROP SCHEMA public CASCADE;
@@ -82,11 +82,13 @@ withTestDB ci cs doMigrate f =
         GRANT ALL ON SCHEMA public TO public;
         COMMENT ON SCHEMA public IS 'standard public schema';
         RESET client_min_messages;
-        |] []
+        |]
+                   []
+
     -- Iterate over all foreign constraints and make them deferrable (so we can
     -- DELETE them without having to worry about the order we do it in)
-    makeConstraintsDeferrable = P.rawExecute
-      [sql|
+    makeConstraintsDeferrable =
+      P.rawExecute [sql|
           DO $$
             DECLARE
                 statements CURSOR FOR
@@ -103,14 +105,15 @@ withTestDB ci cs doMigrate f =
                 END LOOP;
             END;
           $$;
-      |] []
-
+      |]
+                   []
 
 -- Run DELETE FROM on all relations after setting all constraints to deferred
 cleanDB :: MonadIO m => ReaderT SqlBackend m ()
 cleanDB = P.rawExecute cleanDBSql []
   where
-    cleanDBSql = [sql|
+    cleanDBSql =
+      [sql|
          SET client_min_messages TO ERROR;
          SET CONSTRAINTS ALL DEFERRED;
          DO $$
@@ -152,27 +155,24 @@ data TestDone = TestDone
 specApi :: ConnectInfo -- ^ Database connection info
         -> Migration.M () -- ^ Migration script to run once
         -> (ConnectionPool
-             -> (st -> Application -> IO TestDone)
-             -> LoggingT IO TestDone)
-          -- ^ Setup and teardown of Application around each test
+            -> (st -> Application -> IO TestDone)
+            -> LoggingT IO TestDone)
+        -- ^ Setup and teardown of Application around each test
         -> DBApiSpec st -- ^ Tests to run
         -> IO ()
-specApi ci migration withMkApp spec =
-  loggingToChan 20 $ \getLogs -> do
-    logFun <- askLoggerIO
-    withTestDB ci 5 migration $ \pool ->
-      lift . hspec $ aroundWith ( \s () -> runLoggingT (do
-        let s' st app = s ((pool, st), app) >> return TestDone
-        -- Drain logs so we don't get logs from previous tests
-        _ <- liftIO getLogs
-        P.runSqlPool cleanDB pool
-        _ <- Ex.onException (withMkApp pool s') $ do
-          liftIO (mapM_ (BS.hPutStrLn stderr) =<< getLogs)
-        return ()
-                                                ) logFun
-
-                  )
-       spec
+specApi ci migration withMkApp spec = loggingToChan 20 $ \getLogs -> do
+  logFun <- askLoggerIO
+  withTestDB ci 5 migration $ \pool -> lift . hspec $
+    aroundWith (\s () ->
+                runLoggingT (do
+                               let s' st app =
+                                     s ((pool, st), app) >> return TestDone
+                               -- Drain logs so we don't get logs from previous tests
+                               _ <- liftIO getLogs
+                               P.runSqlPool cleanDB pool
+                               _ <- Ex.onException (withMkApp pool s') $ do
+                                 liftIO (mapM_ (BS.hPutStrLn stderr) =<< getLogs)
+                               return ()) logFun) spec
 
 -- | Read database connection info from environment variables, reverting to
 -- defaults if unset.
@@ -190,21 +190,23 @@ dbTestConnectInfo = do
   dbDatabase <- getEnv "DB_DATABASE" "postgres"
   dbPassword <- getEnv "DB_PASSWORD" ""
   dbPort <- getEnv' "DB_PORT" 5432
-  return Postgres.ConnectInfo { Postgres.connectPort = dbPort
-                              , Postgres.connectHost = dbHost
-                              , Postgres.connectUser = dbUser
-                              , Postgres.connectDatabase = dbDatabase
-                              , Postgres.connectPassword = dbPassword
-                              }
+  return Postgres.ConnectInfo
+         { Postgres.connectPort     = dbPort
+         , Postgres.connectHost     = dbHost
+         , Postgres.connectUser     = dbUser
+         , Postgres.connectDatabase = dbDatabase
+         , Postgres.connectPassword = dbPassword
+         }
   where
     getEnv name def = do
       mbE <- lookupEnv name
       return $ fromMaybe def mbE
+
     getEnv' name def = do
       mbE <- lookupEnv name
       case mbE of
-        Nothing -> return def
-        Just r -> case reads r of
-                    [(e,_)] -> return e
-                    _ -> error $ "Could not read " <> name
-                                  <> ", value" <> show r <> " not understood"
+          Nothing -> return def
+          Just r -> case reads r of
+              [ (e, _) ] -> return e
+              _ -> error $ "Could not read " <> name <> ", value" <> show r
+                <> " not understood"
