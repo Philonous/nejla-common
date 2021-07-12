@@ -1,11 +1,9 @@
 module Persistent where
 
+import qualified Persistent.DelayedIO    as DelayedIO
+import qualified Persistent.Serializable as Serializable
+
 import           Test.Tasty
 
-import qualified Persistent.Serializable as Serializable
-import qualified Persistent.DelayedIO as DelayedIO
-
 tests :: TestTree
-tests = testGroup "persistent" [ Serializable.tests
-                               , DelayedIO.tests
-                               ]
+tests = testGroup "persistent" [ Serializable.tests, DelayedIO.tests ]

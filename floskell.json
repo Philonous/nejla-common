@@ -1,0 +1,51 @@
+{
+  "extensions": [
+    "BangPatterns",
+    "DefaultSignatures",
+    "DeriveGeneric",
+    "GeneralizedNewtypeDeriving",
+    "LambdaCase",
+    "NamedFieldPuns",
+    "OverloadedStrings",
+    "PatternGuards",
+    "RecordWildCards",
+    "TemplateHaskell",
+    "MultiParamTypeClasses"
+  ],
+  "fixities": [],
+  "formatting": {
+    "align": {
+      "let-binds": true,
+      "record-fields": true
+    },
+
+    "indent": {
+      "class": "indent-by 2",
+      "do": "indent-by 2",
+      "export-spec-list": "indent-by 2",
+      "let-in": "align",
+      "multi-if": "indent-by 2",
+      "onside": 2
+    },
+    "layout": {
+      "con-decls": "vertical",
+      "declaration": "try-oneline",
+      "export-spec-list": "vertical",
+      "let": "vertical",
+      "record": "vertical"
+    },
+    "op": {
+      "record": {
+        "force-linebreak": true,
+        "linebreaks": "after",
+        "spaces": "none"
+      }
+    },
+    "options": {
+      "align-sum-type-decl": true,
+      "flexible-oneline": true
+    }
+  },
+  "language": "Haskell2010",
+  "style": "cramer"
+}
