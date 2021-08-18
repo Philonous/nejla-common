@@ -1,11 +1,10 @@
 {-# LANGUAGE ApplicativeDo #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FunctionalDependencies #-}
-
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
-
 {-# LANGUAGE StrictData #-}
 {-# LANGUAGE TemplateHaskell #-}
 
@@ -39,6 +38,11 @@ import           Data.Time.Clock                  ( getCurrentTime )
 import qualified Data.Time.Clock                  as Time
 
 import qualified Database.Persist.Sql             as P
+
+#if MIN_VERSION_persistent(2,12,0)
+-- LTS 18
+import qualified Database.Persist.SqlBackend.Internal as P
+#endif
 
 import qualified NejlaCommon.Persistence          as NC
 import           NejlaCommon.Persistence          ( App(..) )

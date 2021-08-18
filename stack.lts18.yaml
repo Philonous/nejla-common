@@ -1,0 +1,16 @@
+resolver: lts-18.4
+packages:
+flags: {}
+
+extra-deps:
+
+extra-package-dbs: []
+
+nix:
+  packages:
+    - zlib
+    - postgresql
+
+docker:
+  enable: false
+  image: nejla/haskell-build

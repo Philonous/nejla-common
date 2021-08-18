@@ -86,7 +86,8 @@ withDB' :: Bool -> (ConnectionPool -> IO a) -> IO a
 withDB' debug (f :: ConnectionPool -> IO a) = do
   if debug then runStderrLoggingT go else runNoLoggingT go
   where
-    go :: (MonadIO m, MonadLogger m, MonadUnliftIO m, Ex.MonadCatch m) => m a
+    go :: ( MonadIO m, MonadLogger m, MonadLoggerIO m
+          , MonadUnliftIO m, Ex.MonadCatch m) => m a
     go = do
       mbConStr <- liftIO $ lookupEnv "TEST_DB_CONNECTION"
       let connectionString = case mbConStr of
