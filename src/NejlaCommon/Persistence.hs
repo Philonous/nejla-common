@@ -154,7 +154,6 @@ import           Data.Singletons
 import           Data.Singletons.TH
 import           Data.Text                         ( Text )
 import qualified Data.Text                         as Text
-import qualified Data.Text                         as TS
 import qualified Data.Text.Encoding                as Text
 import qualified Data.Text.Encoding.Error          as Text
 import           Data.Time
@@ -1045,20 +1044,20 @@ instance PersistField UUID.UUID where
 
   fromPersistValue x = case x of
       Compat.PersistLiteralCompat bs -> case UUID.fromASCIIBytes bs of
-          Nothing -> Left $ "Invalid UUID: " <> TS.pack (show bs)
+          Nothing -> Left $ "Invalid UUID: " <> Text.pack (show bs)
           Just u -> Right u
-      PersistText txt -> case UUID.fromString $ TS.unpack txt of
-          Nothing -> Left $ "Invalid UUID: " <> TS.pack (show txt)
+      PersistText txt -> case UUID.fromString $ Text.unpack txt of
+          Nothing -> Left $ "Invalid UUID: " <> Text.pack (show txt)
           Just u -> Right u
-      e -> Left $ "Can not convert to uuid: " <> TS.pack (show e)
+      e -> Left $ "Can not convert to uuid: " <> Text.pack (show e)
 
 instance PersistFieldSql UUID.UUID where
   sqlType _ = SqlOther "uuid"
 
 instance PathPiece UUID.UUID where
-  fromPathPiece = UUID.fromString . TS.unpack
+  fromPathPiece = UUID.fromString . Text.unpack
 
-  toPathPiece = TS.pack . UUID.toString
+  toPathPiece = Text.pack . UUID.toString
 
 -- | Parse database connection info from configuration file or environment
 -- variables. The relevant variables are
