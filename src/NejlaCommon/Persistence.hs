@@ -154,28 +154,27 @@ import           Data.Singletons
 import           Data.Singletons.TH
 import           Data.Text                         ( Text )
 import qualified Data.Text                         as Text
-import qualified Data.Text                         as TS
 import qualified Data.Text.Encoding                as Text
 import qualified Data.Text.Encoding.Error          as Text
 import           Data.Time
 import           Data.UUID                         ( UUID )
 import qualified Data.UUID                         as UUID
-
 import           Database.Esqueleto
                  ( (&&.), (==.), (?.), (^.), (||.), Checkmark(..)
-                 , ConnectionPool, Entity(..), EntityDef, HaskellName(..)
-                 , PersistEntity(..), PersistField(..), ReferenceDef(..)
-                 , SqlBackend, Value(..), isNothing, just, limit, offset, on
-                 , val, where_ )
+                 , ConnectionPool, Entity(..), EntityDef, PersistEntity(..)
+                 , PersistField(..), ReferenceDef(..), SqlBackend, Value(..)
+                 , isNothing, just, limit, offset, on, val, where_ )
+
 import qualified Database.Esqueleto                as E
-import           Database.Esqueleto.Internal.Sql
+import           Database.Esqueleto.Internal.Internal
 import qualified Database.Esqueleto.PostgreSQL     as Postgres
+import           Database.Persist.Types
+                 (FieldAttr(..))
 import           Database.Persist.Postgresql
                  ( PersistFieldSql, PersistValue(..), SqlType(..)
                  , withPostgresqlPool )
 import qualified Database.PostgreSQL.Simple        as Postgres
 import           Database.PostgreSQL.Simple.Errors
-
 import           GHC.Generics
 
 import qualified Language.Haskell.TH               as TH
@@ -288,12 +287,12 @@ instance MonadLogger (App st r l) where
   monadLoggerLog loc logSource logLevel logStr = do
     -- We use the log function stored in the SqlBackend
     con <- App $ L.view connection
-    liftIO $ E.connLogFunc con loc logSource logLevel $ toLogStr logStr
+    liftIO $ Compat.connLogFunc con loc logSource logLevel $ toLogStr logStr
 
 instance MonadLoggerIO (App st r l) where
   askLoggerIO = do
     con <- App $ L.view connection
-    return $ E.connLogFunc con
+    return $ Compat.connLogFunc con
 
 data SqlConfig =
   SqlConfig
@@ -919,46 +918,49 @@ onForeignKey x y = on $ foreignKey x y
 foreignEnts :: [EntityDef] -> [((String, String), [[(String, String)]])]
 foreignEnts ents = merge $ do
   ent <- ents
-  let entName = unHaskellName $ E.entityHaskell ent
+  let entName = Compat.unEntityNameHS $ Compat.getEntityHaskellName ent
   -- References to the implicit EntityId fields
   let implicits = do
-        field <- E.entityFields ent
+        field <- Compat.getEntityFields ent
         -- We don't handle optional foreign references for now.
-        when (Compat.hasFieldAttrMaybe $ E.fieldAttrs field) []
-        let nm = unHaskellName $ E.fieldHaskell field
+        when (hasFieldAttrMaybe $ E.fieldAttrs field) []
+        let nm = Compat.unFieldNameHS $ E.fieldHaskell field
         ref <- fromForeignRefs $ E.fieldReference field
         return ( (Text.unpack entName, Text.unpack ref)
                , [ (toField entName nm, Text.unpack $ ref <> "Id") ]
                )
       -- References that use explicit »Primary« and »Foreign» declarations
       explicits = do
-        frgn <- E.entityForeigns ent
+        frgn <- Compat.getEntityForeignDefs ent
         -- Check if the foreign reference involves a maybe field
-        when (Compat.hasFieldAttrMaybe [ attr
+        when (hasFieldAttrMaybe [ attr
                                        | -- Find fields the current foreign reference
                                          -- involves
                                          ((nm, _), _) <- E.foreignFields frgn
                                          -- Find the definitions of these fields in the entity
-                                       , field <- E.entityFields ent
+                                       , field <- Compat.getEntityFields ent
                                        , E.fieldHaskell field == nm
                                          -- Return attributes of these fields
                                        , attr <- E.fieldAttrs field
                                        ])
              []
 
-        let remote = unHaskellName $ E.foreignRefTableHaskell frgn
+        let remote = Compat.unEntityNameHS $ E.foreignRefTableHaskell frgn
         return . ((Text.unpack entName, Text.unpack remote), ) $ do
-          ((HaskellName f, _), (HaskellName t, _)) <- E.foreignFields frgn
+          (f, t) <- Compat.foreignFields frgn
           return (toField entName f, toField remote t)
   implicits <> explicits
   where
+    hasFieldAttrMaybe :: [FieldAttr] -> Bool
+    hasFieldAttrMaybe fs = FieldAttrMaybe `elem` fs
     merge =
       -- Head is OK here because group never returns emtpty lists.
       map (\xs -> (fst $ head xs, snd <$> xs))
       . List.groupBy ((==) `Function.on` fst) . List.sortBy (Ord.comparing fst)
 
-    fromForeignRefs (ForeignRef x _) = pure $ unHaskellName x
-    fromForeignRefs _ = mempty
+    fromForeignRefs rs = case Compat.unForeignRefs rs of
+      Just x -> pure $ Compat.unEntityNameHS x
+      Nothing -> mempty
 
     upcase' = upcase . Text.unpack
 
@@ -1044,21 +1046,24 @@ instance PersistField UUID.UUID where
   toPersistValue = toPersistValue . UUID.toString
 
   fromPersistValue x = case x of
-      Compat.PersistLiteralCompat bs -> case UUID.fromASCIIBytes bs of
-          Nothing -> Left $ "Invalid UUID: " <> TS.pack (show bs)
+      PersistLiteral bs -> case UUID.fromASCIIBytes bs of
+          Nothing -> Left $ "Invalid UUID: " <> Text.pack (show bs)
           Just u -> Right u
-      PersistText txt -> case UUID.fromString $ TS.unpack txt of
-          Nothing -> Left $ "Invalid UUID: " <> TS.pack (show txt)
+      PersistLiteralEscaped bs -> case UUID.fromASCIIBytes bs of
+          Nothing -> Left $ "Invalid UUID: " <> Text.pack (show bs)
           Just u -> Right u
-      e -> Left $ "Can not convert to uuid: " <> TS.pack (show e)
+      PersistText txt -> case UUID.fromString $ Text.unpack txt of
+          Nothing -> Left $ "Invalid UUID: " <> Text.pack (show txt)
+          Just u -> Right u
+      e -> Left $ "Can not convert to uuid: " <> Text.pack (show e)
 
 instance PersistFieldSql UUID.UUID where
   sqlType _ = SqlOther "uuid"
 
 instance PathPiece UUID.UUID where
-  fromPathPiece = UUID.fromString . TS.unpack
+  fromPathPiece = UUID.fromString . Text.unpack
 
-  toPathPiece = TS.pack . UUID.toString
+  toPathPiece = Text.pack . UUID.toString
 
 -- | Parse database connection info from configuration file or environment
 -- variables. The relevant variables are
@@ -1069,7 +1074,7 @@ instance PathPiece UUID.UUID where
 -- * DB_PASSWORD / db.password (default = "")
 -- * DB_DATABASE / db.database (default = "postgres")
 getDBConnectInfo
-  :: (MonadLogger m, MonadIO m) => Config -> m Postgres.ConnectInfo
+  :: (MonadLogger m, MonadLoggerIO m, MonadIO m) => Config -> m Postgres.ConnectInfo
 getDBConnectInfo conf = do
   dbHost <- getConf "DB_HOST" "db.host" (Right "localhost") conf
   dbUser <- getConf "DB_USER" "db.user" (Right "postgres") conf
@@ -1087,7 +1092,7 @@ getDBConnectInfo conf = do
 {-# DEPRECATED withPoolNoWait "use getDBConnectionString to parse database connection info" #-}
 
 withPoolNoWait
-  :: (MonadIO m, MonadUnliftIO m, MonadBaseControl IO m, MonadLogger m)
+  :: (MonadIO m, MonadUnliftIO m, MonadBaseControl IO m, MonadLogger m, MonadLoggerIO m)
   => Config
   -> Int
   -> (ConnectionPool -> m b)
@@ -1104,6 +1109,7 @@ withPool :: ( MonadIO m
             , MonadUnliftIO m
             , MonadBaseControl IO m
             , MonadLogger m
+            , MonadLoggerIO m
             , Ex.MonadCatch m
             )
          => Config

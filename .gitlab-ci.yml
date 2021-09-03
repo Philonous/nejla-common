@@ -14,8 +14,8 @@ build:
   parallel:
     matrix:
       - resolver:
-        - lts16
         - lts17
+        - lts18
 
   artifacts:
     paths:

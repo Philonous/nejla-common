@@ -12,7 +12,7 @@ stack_args += --work-dir .stack-work.docker --docker --no-nix --docker-stack-exe
 endif
 
 ifeq ($(origin resolver),undefined)
-resolver := lts17
+resolver := lts18
 endif
 
 stack_yaml = stack.$(resolver).yaml
