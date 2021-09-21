@@ -4,22 +4,20 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
-
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE Rank2Types #-}
-
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
-
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
-
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -123,9 +121,11 @@ module NejlaCommon.Persistence
   , onForeignKey
     -- ** Automatic generation of Foreign Relationships
   , mkForeignInstances
+  , foreignEnts
     -- * Human-readable IDs
   , mkRandomHrID
   , mkUniqueRandomHrID
+
   ) where
 
 import           Control.Concurrent                ( threadDelay )
@@ -173,6 +173,15 @@ import           Database.Persist.Types
 import           Database.Persist.Postgresql
                  ( PersistFieldSql, PersistValue(..), SqlType(..)
                  , withPostgresqlPool )
+#if MIN_VERSION_persistent(2,13,0)
+import Database.Persist.Types
+import           Database.Persist.Quasi.Internal
+                 (UnboundEntityDef(..), UnboundForeignDef(..)
+                 , UnboundForeignFieldList(..), ForeignFieldReference(..)
+                 , UnboundCompositeDef(..), PrimarySpec(..)
+                 , UnboundFieldDef(..)
+                 )
+#endif
 import qualified Database.PostgreSQL.Simple        as Postgres
 import           Database.PostgreSQL.Simple.Errors
 import           GHC.Generics
@@ -910,6 +919,122 @@ onForeignKey :: (ForeignKey a b)
              -> SqlQuery ()
 onForeignKey x y = on $ foreignKey x y
 
+#if MIN_VERSION_persistent(2,12,0)
+--------------------------------------------------------------------------------
+-- LTS 18 ----------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+unboundImplicitForeignDefs
+  :: [ UnboundEntityDef]
+  -> UnboundEntityDef
+  -> [((String, String), [(String, String)])]
+unboundImplicitForeignDefs defs def = do -- List
+  let EntityNameHS localTable = getEntityHaskellName $ unboundEntityDef def
+  -- Look for fields that end with "Id"
+  field <- unboundEntityFields def
+  let FieldNameHS name = unboundFieldNameHS field
+  tp <- case unboundFieldType field of
+          FTTypeCon _ tp -> [tp]
+          _ -> []
+  foreignTable <- case Text.stripSuffix "Id" tp of
+    Nothing -> []
+    Just tp -> [tp]
+  -- Check that the foreign table actually exists and has an ID field
+  checkTablePrimaryKeyIsDefault foreignTable
+
+  [ ((Text.unpack localTable, Text.unpack foreignTable)
+    ,[(toField localTable name, toField foreignTable "id" )])]
+  where
+    upcase' = upcase . Text.unpack
+    toField ent name = Text.unpack ent <> upcase' name
+    checkTablePrimaryKeyIsDefault table =
+      case List.find (\ued -> let EntityNameHS name =
+                                    getEntityHaskellName (unboundEntityDef ued)
+                              in name == table
+                     ) defs of
+        Nothing -> []
+        Just ued -> case unboundPrimarySpec ued of
+          DefaultKey (FieldNameDB "id")  -> [()]
+          _ -> [] -- Default foreign reference to explicit primary key
+
+
+unboundExplicitForeignDefs :: [UnboundEntityDef]
+                           -> UnboundEntityDef
+                           -> [((String, String), [(String, String)])]
+unboundExplicitForeignDefs defs def = do -- List
+  -- Look for explicitly declared foreign constraints
+  UnboundForeignDef{..} <- unboundForeignDefs def
+  let EntityNameHS localTable = getEntityHaskellName $ unboundEntityDef def
+      EntityNameHS foreignTable = foreignRefTableHaskell unboundForeignDef
+  case unboundForeignFields of
+    FieldListImpliedId fields -> case Foldable.toList fields of
+      [FieldNameHS field] -> do -- List
+
+        -- We need to check that the current field is not "Maybe" because we
+        -- don't support that.
+        -- First we look up the fiel definition...
+        case List.find (\f -> unboundFieldNameHS f == FieldNameHS field)
+             (unboundEntityFields def) of
+          Nothing -> error $ "Could not find field definition for foreign field "
+                       ++ show field
+          Just fieldDef ->
+            -- Then we check that it's not "Maybe"
+            guard (not $ FieldAttrMaybe `elem` unboundFieldAttrs fieldDef)
+    -- The foreign reference by default refers to the primary key, which we have
+    -- to look up
+
+        primary <- lookupTablePrimareKey foreignTable
+        [( (Text.unpack localTable, Text.unpack foreignTable)
+         , [(toField localTable field, toField foreignTable primary)])]
+      _ -> [] -- We don't support composite foreign keys yet
+    -- We have an explicit field, so we don't have to look up the primary key
+    FieldListHasReferences fields ->
+        [ ((Text.unpack localTable, Text.unpack foreignTable)
+          , [ (toField localTable source, toField foreignTable target)
+            |  ForeignFieldReference
+              { ffrSourceField = FieldNameHS source
+              , ffrTargetField = FieldNameHS target
+              } <- Foldable.toList fields
+            ]
+          )
+        ]
+  where
+    lookupTablePrimareKey table=
+      case List.find (\ued -> let EntityNameHS name =
+                                    getEntityHaskellName (unboundEntityDef ued)
+                              in name == table
+                     ) defs of
+        Nothing -> error $ "LookupTablePrimaryKey: Table " ++ Text.unpack table
+                         ++ " not found"
+        Just ued -> case unboundPrimarySpec ued of
+          NaturalKey nk -> case unboundCompositeCols nk of
+            [FieldNameHS name] -> [name] -- We don't support multiple keys
+            _ -> []
+          _ -> error "lookupTablePrimaryKey: Non-natural keys are not supported"
+
+    upcase' = upcase . Text.unpack
+    toField ent name = Text.unpack ent <> upcase' name
+
+-- | Calculate the foreign relationships from entity definitions.  The resulting
+-- list is for each entity the entity it refers to and a list of field pairs
+foreignEnts :: [UnboundEntityDef] -> [((String, String), [[(String, String)]])]
+foreignEnts ents = merge $ (unboundImplicitForeignDefs ents =<< ents)
+                           ++ (unboundExplicitForeignDefs ents =<< ents)
+  where
+    merge =
+
+      -- Head is OK here because group never returns emtpty lists.
+      map (\xs -> (fst $ head xs, snd <$> xs))
+      . List.groupBy ((==) `Function.on` fst) . List.sortBy (Ord.comparing fst)
+
+-- | Automatically create ForeignKey instances
+mkForeignInstances :: [UnboundEntityDef] -> TH.Q [TH.Dec]
+#else
+
+--------------------------------------------------------------------------------
+-- LTS 17 ----------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
 --------------------------------------------------------------------------------
 -- Automatic Generation of Foreign Key Pairs -----------------------------------
 --------------------------------------------------------------------------------
@@ -968,6 +1093,7 @@ foreignEnts ents = merge $ do
 
 -- | Automatically create ForeignKey instances
 mkForeignInstances :: [EntityDef] -> TH.Q [TH.Dec]
+#endif
 mkForeignInstances ents = do
   let defs = foreignEnts ents
   concatForM defs $ \((f, t), pairss) -> case pairss of
@@ -996,7 +1122,6 @@ mkForeignInstances ents = do
         return []
   where
     for = flip map
-
     concatForM xs f = concat <$> forM xs f
 
 --------------------------------------------------------------------------------
