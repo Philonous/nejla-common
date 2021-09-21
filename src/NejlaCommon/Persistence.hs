@@ -964,15 +964,25 @@ unboundExplicitForeignDefs :: [UnboundEntityDef]
 unboundExplicitForeignDefs defs def = do -- List
   -- Look for explicitly declared foreign constraints
   UnboundForeignDef{..} <- unboundForeignDefs def
-  -- We don't support nullable foreign keys:
-  guard . not $ E.foreignNullable unboundForeignDef
   let EntityNameHS localTable = getEntityHaskellName $ unboundEntityDef def
       EntityNameHS foreignTable = foreignRefTableHaskell unboundForeignDef
   case unboundForeignFields of
     FieldListImpliedId fields -> case Foldable.toList fields of
+      [FieldNameHS field] -> do -- List
+
+        -- We need to check that the current field is not "Maybe" because we
+        -- don't support that.
+        -- First we look up the fiel definition...
+        case List.find (\f -> unboundFieldNameHS f == FieldNameHS field)
+             (unboundEntityFields def) of
+          Nothing -> error $ "Could not find field definition for foreign field "
+                       ++ show field
+          Just fieldDef ->
+            -- Then we check that it's not "Maybe"
+            guard (not $ FieldAttrMaybe `elem` unboundFieldAttrs fieldDef)
     -- The foreign reference by default refers to the primary key, which we have
     -- to look up
-      [FieldNameHS field] -> do -- List
+
         primary <- lookupTablePrimareKey foreignTable
         [( (Text.unpack localTable, Text.unpack foreignTable)
          , [(toField localTable field, toField foreignTable primary)])]
