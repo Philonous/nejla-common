@@ -2,21 +2,21 @@
 |-|-|
 | elk | Example ELK (Elasticsearch, Logstash, Kibana) stack |
 | elk/README.md | |
-| elk/logstash.conf.d | |
-| elk/logstash.conf.d/1-input-gelf.conf | |
-| elk/logstash.conf.d/2-filter-parse-logs.conf | |
-| elk/logstash.conf.d/3-filter-geopip.conf | |
-| elk/logstash.conf.d/4-output-elasticsearch.conf | |
+| elk/logstash.conf.d | Example configuration components for Logstash |
+| elk/logstash.conf.d/1-input-gelf.conf | Handle inputs via the GELF protocol |
+| elk/logstash.conf.d/2-filter-parse-logs.conf | Parsing logs produced by Nejla Common |
+| elk/logstash.conf.d/3-filter-geopip.conf | Resolving IPs to geographical regions|
+| elk/logstash.conf.d/4-output-elasticsearch.conf | Output to elasticsearch |
 | elk/logstash | |
-| elk/logstash/Dockerfile | |
-| elk/docker-compose.yaml | |
+| elk/logstash/Dockerfile | Custom logstash image to enable required modules|
+| elk/docker-compose.yaml | Docker compose configuration for the example ELK stack |
 | tests | Test suite |
-| tests/Persistent | Testing persistence  related code |
+| tests/Persistent | Testing persistence related code |
 | tests/Persistent/DelayedIO.hs | Tests for IO actions that should run after the transactions commits|
 | tests/Persistent/Serializable.hs | Tests for SERIALIZABLE and retryable transactions|
 | tests/Persistent/Common.hs | Common setup and helpers for tests|
 | tests/logstash | |
-| tests/logstash/conf.d | |
+| tests/logstash/conf.d | Logstash parsing configuration for testing |
 | tests/logstash/conf.d/1-input-stdin.conf | |
 | tests/logstash/conf.d/2-filter-parse-logs.conf | |
 | tests/logstash/conf.d/3-output-stdout.conf | |
@@ -24,7 +24,7 @@
 | tests/Config.hs | Tests for configuration handling |
 | tests/Helpers.hs | Tests for helper functions |
 | tests/Logging.hs | Tests for logging functionality |
-| tests/Logstash.hs | |
+| tests/Logstash.hs | Tests for logstash parsing functionatlity |
 | tests/Persistent.hs | Tests for persistence handling code |
 | tests/Test.hs | Entrypoint for test suite|
 | nuxt-template-files | |
