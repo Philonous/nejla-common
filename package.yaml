@@ -32,6 +32,10 @@ dependencies:
   - persistent-postgresql
   - persistent-template
   - postgresql-simple
+  - servant
+  - servant-server
+  - servant-swagger
+  - swagger2
   - text
   - unordered-containers
 
