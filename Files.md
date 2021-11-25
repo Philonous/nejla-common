@@ -27,30 +27,30 @@
 | tests/Logstash.hs | Tests for logstash parsing functionatlity |
 | tests/Persistent.hs | Tests for persistence handling code |
 | tests/Test.hs | Entrypoint for test suite|
-| nuxt-template-files | |
+| nuxt-template-files | Nuxt.js example project |
 | nuxt-template-files/.dockerignore | |
 | nuxt-template-files/.gitignore | |
 | nuxt-template-files/Dockerfile | |
 | nuxt-template-files/assets | |
 | nuxt-template-files/assets/main.scss | |
 | nuxt-template-files/middleware | |
-| nuxt-template-files/middleware/authenticated.js | |
+| nuxt-template-files/middleware/authenticated.js | Redirection to sign-in page when not logged in |
 | nuxt-template-files/nginx | |
-| nuxt-template-files/nginx/auth-service.include | |
-| nuxt-template-files/nginx/nginx.conf | |
-| nuxt-template-files/nuxt.config.js | |
+| nuxt-template-files/nginx/auth-service.include | Example NGINX configuration |
+| nuxt-template-files/nginx/nginx.conf | Example NGINX configuration |
+| nuxt-template-files/nuxt.config.js | Project configuration with Axios, Bootstrap, Vee Validate and a proxy configuration |
 | nuxt-template-files/pages | |
-| nuxt-template-files/pages/sign-in.vue | |
+| nuxt-template-files/pages/sign-in.vue | Example sign-in page |
 | nuxt-template-files/plugins | |
-| nuxt-template-files/plugins/vee-validate.js | |
-| nuxt-template-files/plugins/axios.js | |
+| nuxt-template-files/plugins/vee-validate.js | Example on how to customize Vee Validate |
+| nuxt-template-files/plugins/axios.js | Redirection to sign-in page on 403 |
 | nuxt-template-files/store | |
-| nuxt-template-files/store/actions.js | |
+| nuxt-template-files/store/actions.js | Vuex example with nuxtServerInit |
 | nuxt-template-files/.vscode | |
-| nuxt-template-files/.vscode/settings.json | |
-| nuxt-template-files/.eslintrc.json | |
-| nuxt-template-files/.gitlab-ci.yml | |
-| nuxt-template-files/jsconfig.json | |
+| nuxt-template-files/.vscode/settings.json | Prettier and Format on Save settings |
+| nuxt-template-files/.eslintrc.json | ESLint settings |
+| nuxt-template-files/.gitlab-ci.yml | GitLab CI configuration for ESLint |
+| nuxt-template-files/jsconfig.json | jsconfig.json file improves code completion in Code |
 | resources | Resources for CI |
 | resources/badge-documentation.svg | CI Badge for linking to the documentation |
 | LICENSE | Project license |
