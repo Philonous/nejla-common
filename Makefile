@@ -62,7 +62,7 @@ doc: build
 tests := $(addprefix dist-$(resolver)/tests/, $(shell stack ide targets --stdout | grep ':test:' | cut -d ':' -f3))
 
 .PHONY: check
-chcek: test
+check: test
 
 testimage:
 	docker-compose -f docker-compose.tests.yaml build

@@ -316,7 +316,10 @@ give it a HashMap of replacements which are applied to
 fields. `camelCaseFields'` comes with default replacements for "type" to "type'"
 and "default" to "default'".
 
-Legal
------
+# Files
+
+See [Files.md](Files.md] for an explanation of source files
+
+# Legal
 
 Copyright © 2014-2021 Nejla AB. All rights reserved.
