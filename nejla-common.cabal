@@ -1,10 +1,8 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.34.5.
 --
 -- see: https://github.com/sol/hpack
---
--- hash: c214c9d8538794f867f87963ba8d2b710d7acef53f58e4d6ed3bb62b9d720513
 
 name:           nejla-common
 version:        0.1.0.0
@@ -33,6 +31,7 @@ library
       NejlaCommon.Persistence.Migration
       NejlaCommon.Persistence.SqlStatistics
   other-modules:
+      NejlaCommon.Component
       NejlaCommon.Logging
       NejlaCommon.Persistence
       NejlaCommon.Persistence.Compat
@@ -79,9 +78,13 @@ library
     , random
     , random-shuffle
     , resourcet
+    , servant
+    , servant-server
+    , servant-swagger
     , singletons >=1.1
     , stm
     , stm-chans
+    , swagger2
     , template-haskell >=2.12
     , text
     , th-lift-instances
@@ -140,8 +143,12 @@ test-suite tests
     , persistent-postgresql
     , persistent-template
     , postgresql-simple
+    , servant
+    , servant-server
+    , servant-swagger
     , shelly
     , singletons
+    , swagger2
     , tasty
     , tasty-hunit
     , tasty-quickcheck
