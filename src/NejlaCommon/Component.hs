@@ -10,7 +10,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Component where
+module NejlaCommon.Component where
 
 import           Control.Lens
 import           Data.Set                       (Set)
