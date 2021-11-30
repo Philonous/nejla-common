@@ -240,6 +240,42 @@ output {
 }
 ```
 
+# Servant components
+
+NejlaCommon.Component contains a [servant](https://hackage.haskell.org/package/servant) combinator that allows you to tag an endpoint with a component.
+
+For example
+
+```haskell
+type API = Component "statistics" :> "my" :> "path" :> Get '[JSON] MyData
+```
+
+Alternatively you can tag a group of endpoints:
+
+```haskell
+type API = Component "statistics" :> ("my" :> "path" :> Get '[JSON] MyData
+                                     :<|> "another" :> "endpoint" :> Post '[JSON] Something
+                                     )
+```
+
+Endpoints tagged like this will have the component set as a tag in swagger, swagger-ui will then group them.
+
+Note that the servant-server requires `EnabledCompenents` to be set as a context, which contains a `Set` of component names (as `Text`). Endpoints that are tagged as components will only be reachable if the component is enabled (member of the set). Otherwise they will always return `404`.
+
+For example, to enable the `statistics` component:
+
+```haskell
+serveWithContext
+    api
+    ( EnabledComponents (Set.fromList ["statistics"])
+        :. EmptyContext)
+    handler
+```
+
+where `api` is your api type and `handler` the corresponding handler function
+
+Component can be nested, so endpoints can belong to more than one component. The swagger documentation will have all of them set as tags and the endpoint is only reachable if all set components are set. (This just falls out of how servant components work)
+
 # Warnings
 
 Warnings can catch errors early. To make them useful, projects should be kept
