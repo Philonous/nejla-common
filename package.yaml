@@ -53,7 +53,6 @@ library:
     - NejlaCommon.Test.Logging
     - NejlaCommon.Test.Expectation
     - NejlaCommon.Persistence.Migration
-    - NejlaCommon.Persistence.SqlStatistics
   dependencies:
     - base >=4.7 && <5.0
     - async
