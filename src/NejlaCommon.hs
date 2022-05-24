@@ -1,7 +1,7 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -26,11 +26,16 @@ module NejlaCommon
 
 import           Control.Applicative
 import           Control.Monad
+import           Data.String             (fromString)
 
 import           Data.Aeson
 import           Data.Data
 import           Data.Default
+#if MIN_VERSION_aeson(2,0,0)
+import qualified Data.Aeson.KeyMap       as HMap
+#else
 import qualified Data.HashMap.Strict     as HMap
+#endif
 import qualified Data.List               as L
 import           Data.Maybe
 import qualified Data.Text               as TS
@@ -218,7 +223,7 @@ data WithField (name :: Symbol) fieldType baseType =
 instance (KnownSymbol name, ToJSON fieldType, ToJSON baseType)
   => ToJSON (WithField name fieldType baseType) where
   toJSON wf =
-    let fName = TS.pack $ symbolVal (Proxy :: Proxy name)
+    let fName = fromString $ symbolVal (Proxy :: Proxy name)
     in case toJSON $ withFieldBase wf of
            Object o -> case toJSON $ withFieldField wf of
                Null -> Object o
@@ -228,7 +233,7 @@ instance (KnownSymbol name, ToJSON fieldType, ToJSON baseType)
 instance (KnownSymbol name, FromJSON fieldType, FromJSON baseType)
   => FromJSON (WithField name fieldType baseType) where
   parseJSON = withObject "object" $ \o -> do
-    let fName = TS.pack $ symbolVal (Proxy :: Proxy name)
+    let fName = fromString $ symbolVal (Proxy :: Proxy name)
     fv <- o .:? fName
     f <- case fv of
         Nothing -> parseJSON Null

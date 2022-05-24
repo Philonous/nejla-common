@@ -10,10 +10,17 @@ copyright:
 license: BSD3
 homepage: https://github.com/nejla/nejla-common
 
+flags:
+  new-singletons:
+    default: true
+    manual: false
+
 when:
   - condition: impl(ghc >= 8.10)
     default-extensions:
       - StandaloneKindSignatures
+
+
 
 dependencies:
   - aeson
@@ -74,7 +81,6 @@ library:
     - random
     - random-shuffle
     - resourcet
-    - singletons >=1.1
     - stm
     - stm-chans
     - template-haskell >=2.12
@@ -87,6 +93,17 @@ library:
     - wai
     - wai-extra
     - warp
+  when:
+    condition: flag(new-singletons)
+    then:
+      dependencies:
+        - singletons >=3.0
+        - singletons-th
+        - singletons-base
+    else:
+      dependencies:
+        - singletons >=1.1 && < 3.0
+
 
 tests:
   tests:
