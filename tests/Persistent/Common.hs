@@ -2,7 +2,7 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
-
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -15,6 +15,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Persistent.Common where
 
@@ -30,7 +31,11 @@ import           Data.ByteString             ( ByteString )
 import           Data.Default
 import           Data.IORef
 import           Data.Singletons
+#if MIN_VERSION_singletons(3,0,0)
+import           Data.Ord.Singletons
+#else
 import           Data.Singletons.Prelude.Ord
+#endif
 import           Data.Text                   ( Text )
 import qualified Data.Text                   as Text
 import qualified Data.Text.Encoding          as Text
@@ -124,9 +129,9 @@ resetDB = forM_ resetCommands $ \c -> rawExecute c []
 commit :: MonadIO m => ReaderT SqlBackend m ()
 commit = transactionSave
 
-getSum :: (MonadIO m, MonadFail m) => Int -> ReaderT SqlBackend m Rational
+getSum :: (MonadIO m, MonadFail m) => Int -> SqlReadT m Rational
 getSum i = do
-  [ Value res ] <- E.select . E.from $ \foo -> do
+  [ Value res ] <- E.select $ E.from $ \foo -> do
     E.where_ $ foo E.^. FooClass E.==. E.val i
     return $ coalesceDefault [ E.sum_ $ foo E.^. FooValue ] (val 0)
   return res

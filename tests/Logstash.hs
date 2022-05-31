@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE CPP #-}
 
 -- | Test interaction between parsing output and logstash
 module Logstash where
@@ -10,7 +11,11 @@ import           Control.Monad.Reader
 
 import qualified Data.Aeson              as Aeson
 import qualified Data.ByteString.Lazy    as BSL
+#if MIN_VERSION_aeson(2,0,0)
+import qualified Data.Aeson.KeyMap       as HMap
+#else
 import qualified Data.HashMap.Strict     as HMap
+#endif
 import           Data.Monoid
 import           Data.Text               ( Text )
 import qualified Data.Text               as Text
@@ -77,7 +82,7 @@ runLogstash f = shelly . silently $ do
   out <- logstash [ "-w", "1", "--quiet", "-l", "/dev/null" ]
   stripped
     <- case Text.stripPrefix "Sending logstash logs to /dev/null.\n" out of
-        Nothing -> terror "Expected output prefix \
+        Nothing -> terror "Expected output prefix \\
                          \ \"Sending logstash logs to /dev/null.\\n\""
         Just s -> return s
   return $ splitLines stripped
