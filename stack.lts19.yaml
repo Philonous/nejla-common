@@ -1,13 +1,13 @@
-resolver: lts-18.28
+resolver: lts-19.7
 packages:
-
-extra-deps:
-
-extra-package-dbs: []
-
 flags:
   nejla-common:
-    new-singletons: false
+    new-singletons: true
+
+extra-deps:
+  - hspec-wai-json-0.11.0
+
+extra-package-dbs: []
 
 nix:
   packages:

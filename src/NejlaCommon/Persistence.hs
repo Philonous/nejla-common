@@ -128,53 +128,61 @@ module NejlaCommon.Persistence
 
   ) where
 
-import           Control.Concurrent                ( threadDelay )
+import           Control.Concurrent                   ( threadDelay )
 import           Control.Concurrent.Async
-import qualified Control.Lens                      as L
+import qualified Control.Lens                         as L
 import           Control.Lens.TH
 import           Control.Monad.Base
-import qualified Control.Monad.Catch               as Ex
-import           Control.Monad.IO.Unlift           ( MonadUnliftIO )
+import qualified Control.Monad.Catch                  as Ex
+import           Control.Monad.IO.Unlift              ( MonadUnliftIO )
 import           Control.Monad.Logger
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Control
 
-import qualified Data.Aeson                        as Aeson
-import           Data.Aeson                        hiding ( Value )
-import           Data.ByteString                   ( ByteString )
+import qualified Data.Aeson                           as Aeson
+import           Data.Aeson                           hiding ( Value, Key )
+import qualified Data.Aeson.Types                     as Aeson
+#if MIN_VERSION_aeson(2,0,0)
+import qualified Data.Aeson.Key                       as Aeson
+#endif
+import           Data.ByteString                      ( ByteString )
 import           Data.Data
 import           Data.Default
-import qualified Data.Foldable                     as Foldable
-import qualified Data.Function                     as Function
+import qualified Data.Foldable                        as Foldable
+import qualified Data.Function                        as Function
 import           Data.IORef
-import qualified Data.List                         as List
-import           Data.Maybe                        ( catMaybes, maybeToList )
-import qualified Data.Ord                          as Ord
+import qualified Data.List                            as List
+import           Data.Maybe                           ( catMaybes, maybeToList )
+import qualified Data.Ord                             as Ord
+#if MIN_VERSION_singletons(3,0,0)
+import           Data.Ord.Singletons
 import           Data.Singletons
+import           Prelude.Singletons
+#endif
 import           Data.Singletons.TH
-import           Data.Text                         ( Text )
-import qualified Data.Text                         as Text
-import qualified Data.Text.Encoding                as Text
-import qualified Data.Text.Encoding.Error          as Text
+import           Data.Text                            ( Text )
+import qualified Data.Text                            as Text
+import qualified Data.Text.Encoding                   as Text
+import qualified Data.Text.Encoding.Error             as Text
 import           Data.Time
-import           Data.UUID                         ( UUID )
-import qualified Data.UUID                         as UUID
+import           Data.UUID                            ( UUID )
+import qualified Data.UUID                            as UUID
 import           Database.Esqueleto
                  ( (&&.), (==.), (?.), (^.), (||.), Checkmark(..)
                  , ConnectionPool, Entity(..), EntityDef, PersistEntity(..)
                  , PersistField(..), ReferenceDef(..), SqlBackend, Value(..)
                  , isNothing, just, limit, offset, on, val, where_ )
 
-import qualified Database.Esqueleto                as E
+import qualified Database.Esqueleto                   as E
 import           Database.Esqueleto.Internal.Internal
-import qualified Database.Esqueleto.PostgreSQL     as Postgres
+import qualified Database.Esqueleto.PostgreSQL        as Postgres
 import           Database.Persist.Types
                  (FieldAttr(..))
 import           Database.Persist.Postgresql
                  ( PersistFieldSql, PersistValue(..), SqlType(..)
                  , withPostgresqlPool )
 #if MIN_VERSION_persistent(2,13,0)
-import Database.Persist.Types
+import           Database.Persist.Types
 import           Database.Persist.Quasi.Internal
                  (UnboundEntityDef(..), UnboundForeignDef(..)
                  , UnboundForeignFieldList(..), ForeignFieldReference(..)
@@ -182,16 +190,16 @@ import           Database.Persist.Quasi.Internal
                  , UnboundFieldDef(..)
                  )
 #endif
-import qualified Database.PostgreSQL.Simple        as Postgres
+import qualified Database.PostgreSQL.Simple           as Postgres
 import           Database.PostgreSQL.Simple.Errors
 import           GHC.Generics
 
-import qualified Language.Haskell.TH               as TH
+import qualified Language.Haskell.TH                  as TH
 
 import           NejlaCommon.Config
 import           NejlaCommon.Helpers
-import qualified NejlaCommon.Persistence.Compat    as Compat
-import qualified NejlaCommon.Persistence.Migration as Migration
+import qualified NejlaCommon.Persistence.Compat       as Compat
+import qualified NejlaCommon.Persistence.Migration    as Migration
 
 import           System.Random
 import           System.Random.Shuffle
@@ -228,7 +236,8 @@ setTransactionLevel l = do
 
 genSingletons [ ''Privilege, ''TransactionLevel ]
 
-promoteEqInstances [ ''Privilege, ''TransactionLevel ]
+promoteEqInstance ''Privilege
+promoteEqInstance ''TransactionLevel
 
 promoteOrdInstances [ ''Privilege, ''TransactionLevel ]
 
@@ -502,8 +511,12 @@ data PersistError
 
 -- | Operator for setting text-valued JSON object fields (overloaded strings
 -- breaks type inference for string literals)
-(..=) :: Text -> Text -> (Text, Aeson.Value)
+(..=) :: Text -> Text -> Aeson.Pair
+#if MIN_VERSION_aeson(2,0,0)
+key ..= v = Aeson.fromText key .= v
+#else
 (..=) = (.=)
+#endif
 
 instance ToJSON PersistError where
   toJSON (Conflict entity fields) =
@@ -1160,12 +1173,15 @@ mkUniqueRandomHrID
   -> App st 'Unprivileged 'ReadCommitted typ
 mkUniqueRandomHrID fromCandidate len field = do
   candidate <- liftIO $ mkRandomHrID len
-  [ Value rows ] <- db . select . E.from $ \o -> do
+  [ Value rows ] <- db . mySelect . E.from $ \o -> do
     where_ $ o ^. field ==. val (fromCandidate candidate)
     return E.countRows
   if (rows :: Rational) > 0
     then mkUniqueRandomHrID fromCandidate len field
     else return $ fromCandidate candidate
+  where
+    mySelect :: PersistField a => SqlQuery (SqlExpr (Value a)) -> ReaderT SqlBackend IO [Value a]
+    mySelect v = select v
 
 instance PersistField UUID.UUID where
   toPersistValue = toPersistValue . UUID.toString

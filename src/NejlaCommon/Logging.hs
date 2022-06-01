@@ -9,6 +9,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE CPP #-}
 
 module NejlaCommon.Logging where
 
@@ -27,7 +28,6 @@ import qualified Data.ByteString.Builder  as BS
 import qualified Data.ByteString.Lazy     as BSL
 import qualified Data.CaseInsensitive     as CI
 import           Data.Data
-import qualified Data.HashMap.Strict      as HMap
 import           Data.IORef
 import qualified Data.List                as List
 import           Data.Text                ( Text )
@@ -35,6 +35,12 @@ import qualified Data.Text                as Text
 import qualified Data.Text.Encoding       as Text
 import qualified Data.Text.Encoding.Error as Text
 import           Data.Time.Clock          ( UTCTime, getCurrentTime )
+
+#if MIN_VERSION_aeson(2,0,0)
+import qualified Data.Aeson.KeyMap        as HMap
+#else
+import qualified Data.HashMap.Strict      as HMap
+#endif
 
 import           GHC.Generics
 
