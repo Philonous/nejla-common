@@ -12,7 +12,7 @@ stack_args += --work-dir .stack-work.docker --docker --no-nix --docker-stack-exe
 endif
 
 ifeq ($(origin resolver),undefined)
-resolver := lts19
+resolver := lts22
 endif
 
 stack_yaml = stack.$(resolver).yaml
@@ -27,7 +27,7 @@ all: dist
 dist: dist-$(resolver)
 	ln -sfT dist-$(resolver) dist
 
-dist-$(resolver): $(srcfiles) $(test-srcfiles) package.yaml stack.yaml
+dist-$(resolver): $(srcfiles) $(test-srcfiles) package.yaml $(stack_yaml)
 	rm -f *.cabal
 	rm -f stack.*.yaml.lock
 	$(stack) build --install-ghc \
