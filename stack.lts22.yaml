@@ -1,0 +1,16 @@
+resolver: lts-22.12
+packages:
+flags:
+  nejla-common:
+    new-singletons: true
+
+extra-package-dbs: []
+
+nix:
+  packages:
+    - zlib
+    - postgresql
+
+docker:
+  enable: false
+  image: nejla/haskell-build

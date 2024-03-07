@@ -132,6 +132,7 @@ import           Control.Concurrent                   ( threadDelay )
 import           Control.Concurrent.Async
 import qualified Control.Lens                         as L
 import           Control.Lens.TH
+import           Control.Monad                        ( guard, when, replicateM)
 import           Control.Monad.Base
 import qualified Control.Monad.Catch                  as Ex
 import           Control.Monad.IO.Unlift              ( MonadUnliftIO )
@@ -165,6 +166,7 @@ import qualified Data.Text                            as Text
 import qualified Data.Text.Encoding                   as Text
 import qualified Data.Text.Encoding.Error             as Text
 import           Data.Time
+import           Data.Traversable                     ( forM )
 import           Data.UUID                            ( UUID )
 import qualified Data.UUID                            as UUID
 import           Database.Esqueleto
@@ -713,7 +715,11 @@ conflict descr = Conflict (uniqueType descr) (uniqueFieldNames descr)
 
 -- | Insert a value, throwing a Conflict exception when a uniqueness constraint
 -- is violated
-insertUniqueConflict :: (DescribeUnique a, PersistEntityBackend a ~ SqlBackend)
+insertUniqueConflict :: ( DescribeUnique a
+#if MIN_VERSION_persistent(2,14,0)
+                        , E.SafeToInsert a
+#endif
+                        , PersistEntityBackend a ~ SqlBackend)
                      => a
                      -> App st 'Privileged 'ReadCommitted (Key a)
 insertUniqueConflict x = do
@@ -1020,7 +1026,7 @@ unboundExplicitForeignDefs defs def = do -- List
         Nothing -> error $ "LookupTablePrimaryKey: Table " ++ Text.unpack table
                          ++ " not found"
         Just ued -> case unboundPrimarySpec ued of
-          NaturalKey nk -> case unboundCompositeCols nk of
+          NaturalKey nk -> case Foldable.toList (unboundCompositeCols nk) of
             [FieldNameHS name] -> [name] -- We don't support multiple keys
             _ -> []
           _ -> error "lookupTablePrimaryKey: Non-natural keys are not supported"
