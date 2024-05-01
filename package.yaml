@@ -48,8 +48,8 @@ dependencies:
   - postgresql-simple
   - servant
   - servant-server
-  - servant-swagger
-  - swagger2
+  - servant-openapi3
+  - openapi3
   - text
   - unordered-containers
 

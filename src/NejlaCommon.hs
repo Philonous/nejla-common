@@ -6,6 +6,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -38,9 +39,13 @@ import qualified Data.HashMap.Strict     as HMap
 #endif
 import qualified Data.List               as L
 import           Data.Maybe
-import qualified Data.Text               as TS
+import qualified Data.Text               as Text
 import           Data.Time.Clock
 import           Data.Time.Format
+import           Data.OpenApi.Lens       hiding (patch)
+import           Data.OpenApi.Schema
+import           Control.Lens
+
 
 import           GHC.Generics            ( Generic )
 import           GHC.TypeLits
@@ -243,6 +248,17 @@ instance (KnownSymbol name, FromJSON fieldType, FromJSON baseType)
            { withFieldField = f
            , withFieldBase  = b
            }
+
+instance (KnownSymbol name, ToSchema fieldType, ToSchema baseType) =>
+         ToSchema (WithField name fieldType baseType) where
+  declareNamedSchema _ = do
+    ref <- declareSchemaRef (Proxy @fieldType)
+    baseSchema <- declareNamedSchema (Proxy @baseType)
+    let fName = Text.pack $ symbolVal (Proxy @name)
+    return $ baseSchema
+      & schema . properties . at fName ?~ ref
+      & schema . required %~ (fName:)
+
 
 -- | Produces an \"ISO\" (ISO 8601) string.
 formatUTC :: UTCTime -> String

@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.7.
+-- This file has been generated from package.yaml by hpack version 0.36.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -72,6 +72,7 @@ library
     , monad-control
     , monad-logger
     , mtl >=2.2
+    , openapi3
     , path-pieces
     , persistent
     , persistent-postgresql
@@ -82,11 +83,10 @@ library
     , random-shuffle
     , resourcet
     , servant
+    , servant-openapi3
     , servant-server
-    , servant-swagger
     , stm
     , stm-chans
-    , swagger2
     , template-haskell >=2.12
     , text
     , th-lift-instances
@@ -99,6 +99,7 @@ library
     , wai
     , wai-extra
     , warp
+  default-language: Haskell2010
   if impl(ghc >= 8.10)
     default-extensions:
         StandaloneKindSignatures
@@ -110,7 +111,6 @@ library
   else
     build-depends:
         singletons >=1.1 && <3.0
-  default-language: Haskell2010
 
 test-suite tests
   type: exitcode-stdio-1.0
@@ -149,16 +149,16 @@ test-suite tests
     , monad-logger
     , mtl
     , nejla-common
+    , openapi3
     , persistent
     , persistent-postgresql
     , persistent-template
     , postgresql-simple
     , servant
+    , servant-openapi3
     , servant-server
-    , servant-swagger
     , shelly
     , singletons
-    , swagger2
     , tasty
     , tasty-hunit
     , tasty-quickcheck
@@ -169,6 +169,7 @@ test-suite tests
     , time
     , unliftio
     , unordered-containers
+  default-language: Haskell2010
   if impl(ghc >= 8.10)
     default-extensions:
         StandaloneKindSignatures
@@ -180,4 +181,3 @@ test-suite tests
   else
     build-depends:
         singletons >=1.1 && <3.0
-  default-language: Haskell2010
