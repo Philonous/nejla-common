@@ -7,6 +7,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeOperators #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -21,6 +23,7 @@ module NejlaCommon
   , DerivedData(..)
   , WithField(..)
   , derivedType
+  , StructLike
   , formatUTC
   , parseUTC
   ) where
@@ -43,11 +46,12 @@ import qualified Data.Text               as Text
 import           Data.Time.Clock
 import           Data.Time.Format
 import           Data.OpenApi.Lens       hiding (patch)
-import           Data.OpenApi.Schema
+import           Data.OpenApi.Schema     as Schema
+import           Data.OpenApi.Internal.Schema (GToSchema)
 import           Control.Lens
 
 
-import           GHC.Generics            ( Generic )
+import           GHC.Generics            ( Generic, Rep, M1(..), D, Datatype(..) )
 import           GHC.TypeLits
 
 import           Language.Haskell.TH     as TH
@@ -270,3 +274,37 @@ parseUTC t =
   parseTimeM True defaultTimeLocale "%FT%T%QZ" t
   <|> parseTimeM True defaultTimeLocale "%FT%T%Q%z" t
   <|> parseTimeM True defaultTimeLocale "%F" t
+
+-- | Newtype for via-deriving openAPI schema specifications for record types
+--
+-- - Expects field names to be prefixed with the name of the type
+-- - field names will be in camelCase
+--
+-- Use like this:
+-- {-# LANGUAGE DeriveGeneric #-}
+-- {-# LANGUAGE DerivingVia #-}
+--
+
+-- data Foo = Foo { fooBar :: Int, fooQuux :: Bool}
+--    deriving (Generic)
+--    deriving ToSchema via (StructLike Foo)
+newtype StructLike a = StructLike a
+
+instance (Typeable a, Generic a, GToSchema (Rep a)
+         , Rep a ~ M1 d m m1
+         , Datatype m
+         )
+  => ToSchema (StructLike a) where
+  -- declareNamedSchema :: Proxy a -> Declare (Definitions Schema) NamedSchema
+  declareNamedSchema _prx =
+    -- Assume that the field prefix is the (lower case) name of the type
+    -- E.g. data Foo = Bar {fooQuux :: Int}
+    -- => field name is "quux"
+    let prf = downcase $ datatypeName (M1 Proxy :: M1 d m Proxy m1)
+    in genericDeclareNamedSchema
+       (opts prf) (Proxy @a)
+    where
+      opts prf =
+        defaultSchemaOptions {
+        Schema.fieldLabelModifier = downcase . withoutPrefix prf
+        }
