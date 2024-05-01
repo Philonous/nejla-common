@@ -36,6 +36,7 @@ library
   other-modules:
       NejlaCommon.Component
       NejlaCommon.Logging
+      NejlaCommon.Orphans
       NejlaCommon.Persistence
       NejlaCommon.Persistence.Compat
       NejlaCommon.Persistence.Util
@@ -65,6 +66,7 @@ library
     , hspec-wai-json
     , http-api-data >=0.3.1
     , http-types >=0.9
+    , insert-ordered-containers
     , interpolate
     , lens
     , microstache
@@ -83,6 +85,7 @@ library
     , random-shuffle
     , resourcet
     , servant
+    , servant-multipart
     , servant-openapi3
     , servant-server
     , stm
@@ -143,6 +146,7 @@ test-suite tests
     , fast-logger
     , formatting
     , hspec-expectations
+    , insert-ordered-containers
     , interpolate
     , lens
     , monad-control
@@ -155,6 +159,7 @@ test-suite tests
     , persistent-template
     , postgresql-simple
     , servant
+    , servant-multipart
     , servant-openapi3
     , servant-server
     , shelly
