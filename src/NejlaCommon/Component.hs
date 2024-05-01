@@ -20,8 +20,8 @@ import qualified Data.Text                      as Text
 import           GHC.Exts                       (IsList(fromList))
 import           GHC.TypeLits
 
-import           Data.Swagger
-import           Servant.Swagger
+import           Data.OpenApi
+import           Servant.OpenApi
 
 import           Servant
 import           Servant.Server.Internal.Router (Router'(StaticRouter))
@@ -31,10 +31,10 @@ data Component (s :: Symbol)
 -- | Context determining which components should be activated
 newtype EnabledComponents = EnabledComponents (Set Text)
 
-instance ( HasServer api ctx
+instance ( Servant.HasServer api ctx
          , KnownSymbol s
          , HasContextEntry ctx EnabledComponents)
-  => HasServer (Component s :> api) ctx where
+  => Servant.HasServer (Component s :> api) ctx where
   type ServerT (Component s :> api) m = ServerT api m
   route _ ctx d =
     let componentName = Text.pack $ symbolVal (Proxy @s)
@@ -46,9 +46,9 @@ instance ( HasServer api ctx
   hoistServerWithContext _ ctx hoist m =
     hoistServerWithContext (Proxy :: Proxy api) ctx hoist m
 
-instance (KnownSymbol s, HasSwagger api) => HasSwagger (Component s :> api) where
-  toSwagger _ =
-    toSwagger (Proxy :: Proxy api)
+instance (KnownSymbol s, HasOpenApi api) => HasOpenApi (Component s :> api) where
+  toOpenApi _ =
+    toOpenApi (Proxy :: Proxy api)
       & paths . traversed . pathItemOperations . _Just
       . tags
        %~ (<> fromList [componentName])
