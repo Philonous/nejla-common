@@ -38,6 +38,7 @@ dependencies:
   - esqueleto
   - fast-logger
   - HUnit
+  - insert-ordered-containers
   - interpolate
   - lens
   - monad-control
@@ -47,6 +48,7 @@ dependencies:
   - persistent-template
   - postgresql-simple
   - servant
+  - servant-multipart
   - servant-server
   - servant-openapi3
   - openapi3
