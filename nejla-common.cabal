@@ -26,6 +26,7 @@ library
       NejlaCommon
       NejlaCommon.Config
       NejlaCommon.Helpers
+      NejlaCommon.Orphans
       NejlaCommon.Sendmail
       NejlaCommon.Test
       NejlaCommon.Test.Postgres
@@ -36,7 +37,6 @@ library
   other-modules:
       NejlaCommon.Component
       NejlaCommon.Logging
-      NejlaCommon.Orphans
       NejlaCommon.Persistence
       NejlaCommon.Persistence.Compat
       NejlaCommon.Persistence.Util
