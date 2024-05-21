@@ -25,6 +25,8 @@ import           Data.OpenApi.Schema          as Schema
 import qualified Data.Text                    as Text
 import           GHC.Generics
 import           GHC.TypeLits
+import           Web.HttpApiData              ( ToHttpApiData(..)
+                                              , FromHttpApiData(..))
 
 import           Data.Aeson
 
@@ -105,6 +107,8 @@ instance (KnownSymbol typeName, EnumToJSON f)
 enumToJSON' ::(Generic a, EnumToJSON (Rep a)) => a -> Value
 enumToJSON' x = String . Text.pack $ enumToJSON (from x)
 
+
+
 -- FromJSON
 -----------
 
@@ -142,11 +146,20 @@ instance (Generic a, EnumFromJSON (Rep a)) => FromJSON (AsEnum a) where
       Nothing -> mempty
       Just v -> return $ AsEnum $ to v
 
+-- HttpApiData
+--------------
+
+instance (Generic a, EnumFromJSON (Rep a)) => FromHttpApiData (AsEnum a) where
+  parseUrlPiece txt = case enumParseJSON "" (Text.unpack txt) of
+                        Nothing -> Left $ "Could not parse value " <> txt
+                        Just r -> Right $ AsEnum (to r)
+
+instance (Generic a, EnumToJSON (Rep a)) => ToHttpApiData (AsEnum a) where
+  toUrlPiece (AsEnum a) = Text.pack $ enumToJSON (from a)
+
+
 -- Schema
 ---------
-
--- This will start working once openApi2 2.4 is on stackage
--- Until then the polymorphic proxy in declareNamedSchema leads to role errors
 
 class EnumSchema (f :: Type -> Type) where
   enumSchema :: Proxy f
@@ -166,6 +179,8 @@ instance (KnownSymbol typeName, EnumSchema f)
   enumSchema _ _ =
     let prefix = symbolVal (Proxy :: Proxy typeName)
     in enumSchema (Proxy :: Proxy f) prefix
+
+
 
 -- Enum Schema -----------------------------------------------------------------
 
