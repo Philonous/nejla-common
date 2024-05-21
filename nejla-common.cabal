@@ -36,6 +36,7 @@ library
       NejlaCommon.Persistence.Migration
   other-modules:
       NejlaCommon.Component
+      NejlaCommon.JSON
       NejlaCommon.Logging
       NejlaCommon.Persistence
       NejlaCommon.Persistence.Compat

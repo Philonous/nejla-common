@@ -20,10 +20,10 @@ module NejlaCommon
   ( module NejlaCommon.Wai
   , module NejlaCommon.Persistence
   , module NejlaCommon.Logging
+  , module NejlaCommon.JSON
   , DerivedData(..)
   , WithField(..)
   , derivedType
-  , StructLike
   , formatUTC
   , parseUTC
   ) where
@@ -47,19 +47,20 @@ import           Data.Time.Clock
 import           Data.Time.Format
 import           Data.OpenApi.Lens       hiding (patch)
 import           Data.OpenApi.Schema     as Schema
-import           Data.OpenApi.Internal.Schema (GToSchema)
 import           Control.Lens
 
-
-import           GHC.Generics            ( Generic, Rep, M1(..), D, Datatype(..) )
+import           GHC.Generics (Generic)
 import           GHC.TypeLits
+
 
 import           Language.Haskell.TH     as TH
 
 import           NejlaCommon.Helpers
+import           NejlaCommon.JSON
 import           NejlaCommon.Logging
 import           NejlaCommon.Persistence
 import           NejlaCommon.Wai
+
 
 -- | See 'derivedType'.
 data DerivedData =
@@ -284,27 +285,3 @@ parseUTC t =
 -- {-# LANGUAGE DeriveGeneric #-}
 -- {-# LANGUAGE DerivingVia #-}
 --
-
--- data Foo = Foo { fooBar :: Int, fooQuux :: Bool}
---    deriving (Generic)
---    deriving ToSchema via (StructLike Foo)
-newtype StructLike a = StructLike a
-
-instance (Typeable a, Generic a, GToSchema (Rep a)
-         , Rep a ~ M1 d m m1
-         , Datatype m
-         )
-  => ToSchema (StructLike a) where
-  -- declareNamedSchema :: Proxy a -> Declare (Definitions Schema) NamedSchema
-  declareNamedSchema _prx =
-    -- Assume that the field prefix is the (lower case) name of the type
-    -- E.g. data Foo = Bar {fooQuux :: Int}
-    -- => field name is "quux"
-    let prf = downcase $ datatypeName (M1 Proxy :: M1 d m Proxy m1)
-    in genericDeclareNamedSchema
-       (opts prf) (Proxy @a)
-    where
-      opts prf =
-        defaultSchemaOptions {
-        Schema.fieldLabelModifier = downcase . withoutPrefix prf
-        }
