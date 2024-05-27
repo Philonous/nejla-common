@@ -34,6 +34,7 @@ library
       NejlaCommon.Test.Logging
       NejlaCommon.Test.Expectation
       NejlaCommon.Persistence.Migration
+      NejlaCommon.Persistence.SqlStatistics
   other-modules:
       NejlaCommon.Component
       NejlaCommon.Logging
