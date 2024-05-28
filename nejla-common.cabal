@@ -26,6 +26,7 @@ library
       NejlaCommon
       NejlaCommon.Config
       NejlaCommon.Helpers
+      NejlaCommon.JSON
       NejlaCommon.Orphans
       NejlaCommon.Sendmail
       NejlaCommon.Test
@@ -36,10 +37,10 @@ library
       NejlaCommon.Persistence.Migration
   other-modules:
       NejlaCommon.Component
-      NejlaCommon.JSON
       NejlaCommon.Logging
       NejlaCommon.Persistence
       NejlaCommon.Persistence.Compat
+      NejlaCommon.Persistence.SqlStatistics
       NejlaCommon.Persistence.Util
       NejlaCommon.Wai
       Paths_nejla_common
@@ -122,6 +123,7 @@ test-suite tests
   other-modules:
       Config
       Helpers
+      JSON
       Logging
       Logstash
       Persistent

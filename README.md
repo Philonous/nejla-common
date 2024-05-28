@@ -352,6 +352,84 @@ give it a HashMap of replacements which are applied to
 fields. `camelCaseFields'` comes with default replacements for "type" to "type'"
 and "default" to "default'".
 
+# JSON helpers
+
+[NejlaCommon.JSON](source/NejlaCommon/JSON.hs) includes helpers for serializing
+data as JSON.
+
+## Record/struct serialization
+
+Consider a typical record type like:
+
+```haskell
+data Foo = Foo
+    { fooBar :: Int
+    , fooQuux :: Bool
+    }
+```
+
+We'd like to serialise it as a json object:
+```json
+{"bar": 123, "quux": false}
+```
+
+This can be done with the `AsObject` newtype. First make sure to derive `Generic`:
+
+```haskell
+data Foo = Foo { fooBar :: Int , fooQuux :: Bool}
+deriving (Generic)
+```
+
+then you can get `ToJSON`, `FromJSON` and openAPI's `ToSchema` "for free" by wrapping values in `AsObject`:
+
+```
+>>> Aeson.encode (AsObject (Foo { fooBar = 123, fooQuux = False }))
+"{\"bar\":123,\"quux\":false}"
+
+>>> Aeson.decode "{\"bar\":123,\"quux\":false}" :: Maybe (AsObject (Foo))
+Just (Foo {fooBar = 123, fooQuux = False})
+```
+
+## Deriving JSON instances using `DeriveGeneric` and `DerivingVia`
+
+Instead of manually wrapping the values you can directly derive instances using
+the `DerivingVia` extension:
+
+```
+data Foo = Foo { fooBar :: Int , fooQuux :: Bool}
+deriving (Generic)
+deriving (ToJSON, FromJSON, ToSchema) via (AsObject Foo)
+```
+
+You can think of this as the compiler automatically doing the wrapping for you.
+
+## JSON and HttpApiData instances for Enums
+
+Similary, enum-like data types (constructors without fields) can automatically
+be serialized as strings. If the name of the Type is used as a prefix of a
+constructor, it is automatically removed
+
+```haskell
+data MyEnum = Foo | MyEnumBar | Baz
+deriving (Generic)
+```
+
+```
+>>> Aeson.encode (AsEnum Foo)
+"\"foo\""
+>>> Aeson.encode (AsEnum MyEnumBar)
+"\"bar\""
+```
+
+Again, you can use `DerivingVia` to attach the instances directly to the base type:
+
+```haskell
+data MyEnum = Foo | MyEnumBar | Baz
+  deriving (Generic)
+  deriving (ToJSON, FromJSON, ToSchema, ToHttpApiData, FromHttpApiData) via (AsEnum MyEnum)
+
+```
+
 # Files
 
 See [Files.md](Files.md] for an explanation of source files

@@ -10,6 +10,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module NejlaCommon.JSON where
 
@@ -28,20 +29,21 @@ import           GHC.TypeLits
 import           Web.HttpApiData              ( ToHttpApiData(..)
                                               , FromHttpApiData(..))
 
-import           Data.Aeson
+import           Data.Aeson                   as Aeson
 
 import           NejlaCommon.Helpers
 
 -- data Foo = Foo { fooBar :: Int, fooQuux :: Bool}
 --    deriving (Generic)
---    deriving ToSchema via (StructLike Foo)
-newtype StructLike a = StructLike a
+--    deriving ToSchema via (AsObject Foo)
+newtype AsObject a = AsObject a
+  deriving newtype (Show, Eq, Ord)
 
 instance (Typeable a, Generic a, GToSchema (Rep a)
          , Rep a ~ M1 d m m1
          , Datatype m
          )
-  => ToSchema (StructLike a) where
+  => ToSchema (AsObject a) where
   -- declareNamedSchema :: Proxy a -> Declare (Definitions Schema) NamedSchema
   declareNamedSchema _prx =
     -- Assume that the field prefix is the (lower case) name of the type
@@ -55,6 +57,30 @@ instance (Typeable a, Generic a, GToSchema (Rep a)
         defaultSchemaOptions {
         Schema.fieldLabelModifier = downcase . withoutPrefix prf
         }
+
+structLikeAesonOptions :: String -> Options
+structLikeAesonOptions prf =
+  defaultOptions
+  { Aeson.fieldLabelModifier = downcase . withoutPrefix prf
+  }
+
+instance (Generic a, GToJSON' Value Zero (Rep a)
+         , Rep a ~ M1 d m m1
+         , Datatype m
+         )
+  => ToJSON (AsObject a) where
+  toJSON (AsObject x) =
+    let prf = downcase $ datatypeName (M1 Proxy :: M1 d m Proxy m1)
+    in genericToJSON (structLikeAesonOptions prf) x
+
+instance ( Generic a, GFromJSON Zero (Rep a)
+         , Rep a ~ M1 d m m1
+         , Datatype m
+         )
+  => FromJSON (AsObject a) where
+  parseJSON v =
+    let prf = downcase $ datatypeName (M1 Proxy :: M1 d m Proxy m1)
+    in AsObject <$> genericParseJSON (structLikeAesonOptions prf) v
 
 -- Enums -----------------------------------------------------------------------
 --------------------------------------------------------------------------------
