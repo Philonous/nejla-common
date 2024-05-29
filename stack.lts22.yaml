@@ -7,9 +7,7 @@ flags:
 extra-package-dbs: []
 
 nix:
-  packages:
-    - zlib
-    - postgresql
+  shell-file: ./shell.nix
 
 docker:
   enable: false
