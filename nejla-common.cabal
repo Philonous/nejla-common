@@ -41,7 +41,6 @@ library
       NejlaCommon.Logging
       NejlaCommon.Persistence
       NejlaCommon.Persistence.Compat
-      NejlaCommon.Persistence.SqlStatistics
       NejlaCommon.Persistence.Util
       NejlaCommon.Wai
       Paths_nejla_common
