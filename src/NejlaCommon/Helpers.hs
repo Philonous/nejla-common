@@ -3,6 +3,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 module NejlaCommon.Helpers where
 
 import           Control.Lens

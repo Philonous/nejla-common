@@ -36,6 +36,8 @@ library
       NejlaCommon.Test.Expectation
       NejlaCommon.Persistence.Migration
       NejlaCommon.Persistence.SqlStatistics
+      NejlaCommon.OpenApi
+      NejlaCommon.OpenApi.Operation
   other-modules:
       NejlaCommon.Component
       NejlaCommon.Logging
@@ -46,7 +48,7 @@ library
       Paths_nejla_common
   hs-source-dirs:
       src
-  ghc-options: -Wall
+  ghc-options: -Wall -Werror=incomplete-patterns -Werror=incomplete-uni-patterns -Werror=incomplete-record-updates -Werror=unused-local-binds -Werror=unused-pattern-binds -Werror=unused-top-binds -Werror=unused-matches -Werror=missing-signatures -Werror=unused-foralls -Wno-deprecations -Wno-name-shadowing -Wno-missed-extra-shared-lib
   build-depends:
       HUnit
     , aeson
@@ -116,6 +118,8 @@ library
   else
     build-depends:
         singletons >=1.1 && <3.0
+  if impl(ghc >= 9.6)
+    ghc-options: -Werror=unused-imports
 
 test-suite tests
   type: exitcode-stdio-1.0

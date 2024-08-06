@@ -57,7 +57,25 @@ dependencies:
 
 library:
   source-dirs: src
-  ghc-options: -Wall
+  ghc-options:
+    - -Wall
+    - -Werror=incomplete-patterns
+    - -Werror=incomplete-uni-patterns
+    - -Werror=incomplete-record-updates
+    - -Werror=unused-local-binds
+    - -Werror=unused-pattern-binds
+    - -Werror=unused-top-binds
+    - -Werror=unused-matches
+    - -Werror=missing-signatures
+    - -Werror=unused-foralls
+    - -Wno-deprecations
+    - -Wno-name-shadowing
+    - -Wno-missed-extra-shared-lib
+  # Only error in latest lts, avoids adding otherwise pointless conditionals
+  when:
+    - condition: impl(ghc >= 9.6)
+      ghc-options:
+        - -Werror=unused-imports
   exposed-modules:
     - NejlaCommon
     - NejlaCommon.Config
@@ -72,6 +90,8 @@ library:
     - NejlaCommon.Test.Expectation
     - NejlaCommon.Persistence.Migration
     - NejlaCommon.Persistence.SqlStatistics
+    - NejlaCommon.OpenApi
+    - NejlaCommon.OpenApi.Operation
   dependencies:
     - base >=4.7 && <5.0
     - async
