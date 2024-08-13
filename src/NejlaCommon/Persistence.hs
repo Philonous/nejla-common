@@ -23,6 +23,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module NejlaCommon.Persistence
   ( -- * SQL Monad
@@ -152,6 +153,7 @@ import           Data.Default
 import qualified Data.Foldable                        as Foldable
 import qualified Data.Function                        as Function
 import           Data.IORef
+import           Data.Kind                            (Type)
 import qualified Data.List                            as List
 import           Data.Maybe                           ( catMaybes, maybeToList )
 import qualified Data.Ord                             as Ord
@@ -170,19 +172,14 @@ import           Data.Traversable                     ( forM )
 import           Data.UUID                            ( UUID )
 import qualified Data.UUID                            as UUID
 import           Database.Esqueleto
-                 ( (&&.), (==.), (?.), (^.), (||.), Checkmark(..)
-                 , ConnectionPool, Entity(..), EntityDef, PersistEntity(..)
-                 , PersistField(..), ReferenceDef(..), SqlBackend, Value(..)
-                 , isNothing, just, limit, offset, on, val, where_ )
+                 ( ConnectionPool, PersistEntity(..)
+                 , PersistField(..), SqlBackend
+                 , )
 
 import qualified Database.Esqueleto                   as E
 import           Database.Esqueleto.Internal.Internal
 import qualified Database.Esqueleto.PostgreSQL        as Postgres
-import           Database.Persist.Types
-                 (FieldAttr(..))
-import           Database.Persist.Postgresql
-                 ( PersistFieldSql, PersistValue(..), SqlType(..)
-                 , withPostgresqlPool )
+import           Database.Persist.Postgresql          ( PersistFieldSql , withPostgresqlPool )
 #if MIN_VERSION_persistent(2,13,0)
 import           Database.Persist.Types
 import           Database.Persist.Quasi.Internal
@@ -287,7 +284,7 @@ viewState f = App . L.view $ userState . f
 -- with this.
 --
 -- If you want to run an action only after the transaction commits, use 'delayIO'
-newtype App (st :: *) (r :: Privilege) (l :: TransactionLevel) a =
+newtype App (st :: Type) (r :: Privilege) (l :: TransactionLevel) a =
   App
   { unApp :: ReaderT (AppState st) IO a
   }
@@ -508,7 +505,7 @@ data PersistError
   | Policy !Text
   | ForeignKey !Text !Text -- Table and field
   | Check !Text !Text
-  | DBError Ex.SomeException
+  | DBError !Ex.SomeException
     deriving ( Show, Typeable, Generic )
 
 -- | Operator for setting text-valued JSON object fields (overloaded strings
@@ -818,7 +815,7 @@ fromMaybeNotFound entType entName item' =
 -- The Following ForeignPair would capture the foreign key relationship
 --
 -- @ForeignPair TeamEmployee EmployeeNum@
-data ForeignPair :: * -> * -> * where
+data ForeignPair :: Type -> Type -> Type where
   ForeignPair :: forall a b f.
     (PersistEntity a, PersistEntity b, PersistField f)
     => EntityField a f
