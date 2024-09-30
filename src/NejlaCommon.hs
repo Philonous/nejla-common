@@ -1,14 +1,15 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -254,7 +255,24 @@ instance (KnownSymbol name, FromJSON fieldType, FromJSON baseType)
            , withFieldBase  = b
            }
 
-instance (KnownSymbol name, ToSchema fieldType, ToSchema baseType) =>
+-- | Ensures that `Maybe` fields aren't set as required fields
+--
+-- You can make your own type optional by adding an overlapping instance for
+-- it that sets `isOptional` to true:
+--
+-- > instance {-# OVERLAPPING #-} MaybeOptional MyOptionalType where
+-- >   isOptional _ = True
+class MaybeOptional a where
+  isOptional :: proxy a -> Bool
+
+instance {-# OVERLAPPING #-} MaybeOptional (Maybe a) where
+  isOptional _ = True
+
+instance {-# OVERLAPPABLE #-} MaybeOptional a where
+  isOptional _ = False
+
+instance (KnownSymbol name, ToSchema fieldType, MaybeOptional fieldType
+         , ToSchema baseType) =>
          ToSchema (WithField name fieldType baseType) where
   declareNamedSchema _ = do
     ref <- declareSchemaRef (Proxy @fieldType)
@@ -262,7 +280,9 @@ instance (KnownSymbol name, ToSchema fieldType, ToSchema baseType) =>
     let fName = Text.pack $ symbolVal (Proxy @name)
     return $ baseSchema
       & schema . properties . at fName ?~ ref
-      & schema . required %~ (fName:)
+      & if isOptional (Proxy :: Proxy fieldType)
+        then Prelude.id
+        else schema . required %~ (fName:)
 
 
 -- | Produces an \"ISO\" (ISO 8601) string.
