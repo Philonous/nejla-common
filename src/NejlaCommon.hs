@@ -279,6 +279,10 @@ instance (KnownSymbol name, ToSchema fieldType, MaybeOptional fieldType
     baseSchema <- declareNamedSchema (Proxy @baseType)
     let fName = Text.pack $ symbolVal (Proxy @name)
     return $ baseSchema
+      & name .~ (baseSchema ^. name <&> \baseName ->
+                                          baseName <> "With"
+                                          <> Text.pack
+                                              (upcase $ Text.unpack fName))
       & schema . properties . at fName ?~ ref
       & if isOptional (Proxy :: Proxy fieldType)
         then Prelude.id
