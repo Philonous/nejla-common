@@ -92,6 +92,7 @@ library:
     - NejlaCommon.Persistence.SqlStatistics
     - NejlaCommon.OpenApi
     - NejlaCommon.OpenApi.Operation
+    - NejlaCommon.OpenApi.Nullable
   dependencies:
     - base >=4.7 && <5.0
     - async
