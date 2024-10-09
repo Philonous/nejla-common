@@ -38,6 +38,7 @@ library
       NejlaCommon.Persistence.SqlStatistics
       NejlaCommon.OpenApi
       NejlaCommon.OpenApi.Operation
+      NejlaCommon.OpenApi.Nullable
   other-modules:
       NejlaCommon.Component
       NejlaCommon.Logging
