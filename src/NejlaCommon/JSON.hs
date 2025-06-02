@@ -30,6 +30,11 @@ import           Web.HttpApiData              ( ToHttpApiData(..)
                                               , FromHttpApiData(..))
 
 import           Data.Aeson                   as Aeson
+import           Database.Persist.Sql         ( PersistField(..)
+                                              , PersistFieldSql(..)
+                                              , PersistValue(..)
+                                              , SqlType(..)
+                                              )
 
 import           NejlaCommon.Helpers
 
@@ -113,6 +118,7 @@ constrToString prefix str =
 -- ToJSON
 ---------
 
+-- This is really EnumToString
 class EnumToJSON f where
   enumToJSON :: f p -> String
 
@@ -138,6 +144,7 @@ enumToJSON' x = String . Text.pack $ enumToJSON (from x)
 -- FromJSON
 -----------
 
+-- This is really EnomFromString
 class EnumFromJSON f where
   enumParseJSON :: String -- ^ Prefix
                 -> String
@@ -159,7 +166,6 @@ instance (EnumFromJSON f, EnumFromJSON g) => EnumFromJSON (f :+: g) where
 instance (KnownSymbol typeName, EnumFromJSON f)
   => EnumFromJSON (M1 D ('MetaData typeName m p x) f) where
   enumParseJSON _ txt = M1 <$> enumParseJSON (symbolVal (Proxy :: Proxy typeName)) txt
-
 
 newtype AsEnum a = AsEnum a
 
@@ -232,3 +238,19 @@ boundedEnumSchema prx = do
 instance (Bounded a, Enum a, ToJSON a, Typeable a)
   => OpenApi.ToSchema (AsEnum a) where
  declareNamedSchema _ = return $ boundedEnumSchema (Proxy @a)
+
+-- Persist field
+
+instance (Generic a, EnumToJSON (Rep a), EnumFromJSON (Rep a))
+  =>  PersistField (AsEnum a) where
+  toPersistValue (AsEnum x) = PersistText $ Text.pack $ enumToJSON (from x)
+  fromPersistValue (PersistText txt) =
+    case enumParseJSON "" (Text.unpack txt) of
+      Just v -> Right $ AsEnum (to v)
+      Nothing -> Left $ "PersistField.fromPersistValue: Could not convert value"
+                 <> txt
+  fromPersistValue v = Left $ "PersistField.fromPersistValue: Could not convert value"
+                 <> Text.pack (show v)
+instance (Generic a, EnumToJSON (Rep a), EnumFromJSON (Rep a))
+  => PersistFieldSql (AsEnum a) where
+  sqlType _ = SqlOther "text"
