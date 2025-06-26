@@ -388,6 +388,7 @@ runApp tLevel conf pool ust ((App m) :: App st p l a) = do
           Just (NotNullViolation column) ->
             Ex.throwM (ForeignKey "not null" (utf8 column))
           Just (UniqueViolation column) -> Ex.throwM (Conflict (utf8 column) [])
+          Just (ExclusionViolation exclusion) -> Ex.throwM (Conflict (utf8 exclusion) [])
           _ -> Ex.throwM $ DBError (Ex.SomeException e)
   after
     <- atomicModifyIORef delayedRef (error "delayedRef: Already executed", )
