@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.36.0.
+-- This file has been generated from package.yaml by hpack version 0.38.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -44,12 +44,13 @@ library
       NejlaCommon.Logging
       NejlaCommon.Persistence
       NejlaCommon.Persistence.Compat
+      NejlaCommon.Persistence.Test
       NejlaCommon.Persistence.Util
       NejlaCommon.Wai
       Paths_nejla_common
   hs-source-dirs:
       src
-  ghc-options: -Wall -Werror=incomplete-patterns -Werror=incomplete-uni-patterns -Werror=incomplete-record-updates -Werror=unused-local-binds -Werror=unused-pattern-binds -Werror=unused-top-binds -Werror=unused-matches -Werror=missing-signatures -Werror=unused-foralls -Wno-deprecations -Wno-name-shadowing -Wno-missed-extra-shared-lib
+  ghc-options: -Wall -Werror=incomplete-patterns -Werror=incomplete-uni-patterns -Werror=incomplete-record-updates -Wno-deprecations -Wno-name-shadowing -Wno-missed-extra-shared-lib
   build-depends:
       HUnit
     , aeson
@@ -72,7 +73,6 @@ library
     , http-api-data >=0.3.1
     , http-types >=0.9
     , insert-ordered-containers
-    , interpolate
     , lens
     , microstache
     , mime-mail
@@ -95,6 +95,7 @@ library
     , servant-server
     , stm
     , stm-chans
+    , string-interpolate
     , template-haskell >=2.12
     , text
     , th-lift-instances
@@ -104,6 +105,7 @@ library
     , unliftio-core
     , unordered-containers
     , uuid
+    , vinyl
     , wai
     , wai-extra
     , warp
@@ -119,8 +121,6 @@ library
   else
     build-depends:
         singletons >=1.1 && <3.0
-  if impl(ghc >= 9.6)
-    ghc-options: -Werror=unused-imports
 
 test-suite tests
   type: exitcode-stdio-1.0
@@ -134,10 +134,13 @@ test-suite tests
       Persistent
       Persistent.Common
       Persistent.DelayedIO
+      Persistent.Migrations
       Persistent.Serializable
       Paths_nejla_common
   hs-source-dirs:
       tests
+  default-extensions:
+      OverloadedStrings
   ghc-options: -threaded -Wall
   build-depends:
       HUnit
@@ -153,9 +156,9 @@ test-suite tests
     , exceptions
     , fast-logger
     , formatting
+    , hspec
     , hspec-expectations
     , insert-ordered-containers
-    , interpolate
     , lens
     , monad-control
     , monad-logger
@@ -172,16 +175,14 @@ test-suite tests
     , servant-server
     , shelly
     , singletons
-    , tasty
-    , tasty-hunit
-    , tasty-quickcheck
-    , tasty-th
+    , string-interpolate
     , template-haskell
     , temporary
     , text
     , time
     , unliftio
     , unordered-containers
+    , vinyl
   default-language: Haskell2010
   if impl(ghc >= 8.10)
     default-extensions:

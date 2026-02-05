@@ -1,9 +1,11 @@
 module Persistent where
 
-import qualified Persistent.DelayedIO    as DelayedIO
+import qualified Persistent.DelayedIO as DelayedIO
 import qualified Persistent.Serializable as Serializable
+import Test.Hspec
+import Persistent.Common (dbSpec)
 
-import           Test.Tasty
-
-tests :: TestTree
-tests = testGroup "persistent" [ Serializable.tests, DelayedIO.tests ]
+spec :: Spec
+spec = dbSpec $ describe "Peristent" $ do
+  Serializable.spec
+  DelayedIO.spec

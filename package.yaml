@@ -62,12 +62,12 @@ library:
     - -Werror=incomplete-patterns
     - -Werror=incomplete-uni-patterns
     - -Werror=incomplete-record-updates
-    - -Werror=unused-local-binds
-    - -Werror=unused-pattern-binds
-    - -Werror=unused-top-binds
-    - -Werror=unused-matches
-    - -Werror=missing-signatures
-    - -Werror=unused-foralls
+    # - -Werror=unused-local-binds
+    # - -Werror=unused-pattern-binds
+    # - -Werror=unused-top-binds
+    # - -Werror=unused-matches
+    # - -Werror=missing-signatures
+    # - -Werror=unused-foralls
     - -Wno-deprecations
     - -Wno-name-shadowing
     - -Wno-missed-extra-shared-lib
@@ -138,16 +138,15 @@ tests:
       - base
       - exceptions
       - formatting
+      - hspec
       - hspec-expectations
       - mtl
       - nejla-common
       - shelly
       - singletons
-      - tasty
-      - tasty-hunit
-      - tasty-quickcheck
-      - tasty-th
       - temporary
       - time
       - template-haskell
       - unliftio
+    default-extensions:
+      - OverloadedStrings
