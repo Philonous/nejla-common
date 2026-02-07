@@ -1,12 +1,9 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Persistent.Serializable where
@@ -17,11 +14,9 @@ import Control.Monad.Trans
 import Database.Persist
 import Database.Persist.Sql
 import qualified Database.PostgreSQL.Simple as Postgres
-import Debug.Trace
 import NejlaCommon
 import Persistent.Common
 import Test.Hspec
-import Test.Hspec.Expectations
 
 --------------------------------------------------------------------------------
 -- Serialization failure -------------------------------------------------------

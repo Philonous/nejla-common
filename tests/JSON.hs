@@ -16,6 +16,7 @@ data TestJsonStruct
   }
   deriving (Generic, Show, Eq)
 
+spec :: Spec
 spec = describe "json / AsObject" $ do
   it "parses from json" $ do
     let input = "{\"foo\": 133, \"bar\":\"hello world\", \"quux\":false}"

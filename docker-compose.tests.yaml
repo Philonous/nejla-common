@@ -20,10 +20,12 @@ services:
     command: sh -ec 'for t in /tests/*; do $$t; done'
   database:
     container_name: nejla-common_testing-database
-    image: postgres:10
+    image: postgres:17
     environment:
       - POSTGRES_HOST_AUTH_METHOD=trust
       - POSTGRES_DB=postgres
+    ports:
+      - 5555:5432
     networks:
       - nejla-common-testing
     command: -c "fsync=off" -c "synchronous_commit=off" -c "full_page_writes=off"
