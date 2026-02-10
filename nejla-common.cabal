@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.38.1.
+-- This file has been generated from package.yaml by hpack version 0.38.3.
 --
 -- see: https://github.com/sol/hpack
 
@@ -34,7 +34,11 @@ library
       NejlaCommon.Test.Json
       NejlaCommon.Test.Logging
       NejlaCommon.Test.Expectation
+      NejlaCommon.Persistence
+      NejlaCommon.Persistence.Util
+      NejlaCommon.Persistence.Compat
       NejlaCommon.Persistence.Migration
+      NejlaCommon.Persistence.Migration.CLI
       NejlaCommon.Persistence.SqlStatistics
       NejlaCommon.OpenApi
       NejlaCommon.OpenApi.Operation
@@ -42,10 +46,6 @@ library
   other-modules:
       NejlaCommon.Component
       NejlaCommon.Logging
-      NejlaCommon.Persistence
-      NejlaCommon.Persistence.Compat
-      NejlaCommon.Persistence.Test
-      NejlaCommon.Persistence.Util
       NejlaCommon.Wai
       Paths_nejla_common
   hs-source-dirs:
@@ -62,7 +62,7 @@ library
     , configurator
     , containers
     , data-default
-    , esqueleto
+    , esqueleto <3.6
     , exceptions >=0.8
     , fast-logger
     , foldl
@@ -80,6 +80,7 @@ library
     , monad-logger
     , mtl >=2.2
     , openapi3
+    , optparse-applicative
     , path-pieces
     , persistent
     , persistent-postgresql
@@ -121,6 +122,8 @@ library
   else
     build-depends:
         singletons >=1.1 && <3.0
+  if impl(ghc >= 9.6)
+    ghc-options: -Werror=unused-imports
 
 test-suite tests
   type: exitcode-stdio-1.0
@@ -152,7 +155,7 @@ test-suite tests
     , configurator
     , containers
     , data-default
-    , esqueleto
+    , esqueleto <3.6
     , exceptions
     , fast-logger
     , formatting

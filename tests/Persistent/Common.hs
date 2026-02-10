@@ -35,6 +35,7 @@ import           Data.Ord.Singletons
 #else
 import           Data.Singletons.Prelude.Ord
 #endif
+import qualified Data.ByteString.Char8 as BS8
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -48,7 +49,6 @@ import System.Environment
 import System.IO
 import Test.Hspec
 import UnliftIO (MonadUnliftIO)
-import qualified Data.ByteString.Char8 as BS8
 
 share
   [mkPersist sqlSettings, mkMigrate "migrateAll"]
@@ -107,7 +107,8 @@ resetCommands =
     "CREATE SCHEMA public",
     "GRANT ALL ON SCHEMA public TO postgres",
     "GRANT ALL ON SCHEMA public TO public",
-    "COMMENT ON SCHEMA public IS 'standard public schema'"
+    "COMMENT ON SCHEMA public IS 'standard public schema'",
+    "DROP SCHEMA IF EXISTS _meta CASCADE"
   ]
 
 resetDB :: (MonadIO m) => ReaderT SqlBackend m ()
@@ -193,11 +194,11 @@ dbSpec = sequential . aroundAll withPool . aroundWith cleanDB
         withPostgresqlPool connectionString 3 $
           \pool -> liftIO $ f (pool, getLogs)
     cleanDB f (pool, getLogs) = do
+      -- Clean out existing logs before running test case
+      _ <- getLogs
       -- Log to stderr directly, since those are connectivity problems rather
       -- than test failures
       runStderrLoggingT $ runPoolRetry pool resetDB
-      -- Clean out existing logs before running test case
-      _ <- getLogs
       Ex.catchAll (f pool) $ \e -> do
         getLogs >>= mapM_ BS8.putStrLn
         Ex.throwM e

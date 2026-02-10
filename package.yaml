@@ -35,11 +35,10 @@ dependencies:
   - configurator
   - containers
   - data-default
-  - esqueleto
+  - esqueleto < 3.6
   - fast-logger
   - HUnit
   - insert-ordered-containers
-  - interpolate
   - lens
   - monad-control
   - monad-logger
@@ -51,6 +50,8 @@ dependencies:
   - servant-multipart
   - servant-server
   - servant-openapi3
+  - string-interpolate
+  - vinyl
   - openapi3
   - text
   - unordered-containers
@@ -88,7 +89,11 @@ library:
     - NejlaCommon.Test.Json
     - NejlaCommon.Test.Logging
     - NejlaCommon.Test.Expectation
+    - NejlaCommon.Persistence
+    - NejlaCommon.Persistence.Util
+    - NejlaCommon.Persistence.Compat
     - NejlaCommon.Persistence.Migration
+    - NejlaCommon.Persistence.Migration.CLI
     - NejlaCommon.Persistence.SqlStatistics
     - NejlaCommon.OpenApi
     - NejlaCommon.OpenApi.Operation
@@ -96,6 +101,7 @@ library:
   dependencies:
     - base >=4.7 && <5.0
     - async
+    - optparse-applicative
     - binary
     - case-insensitive >=1.2
     - exceptions >=0.8
