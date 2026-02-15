@@ -92,15 +92,19 @@ withTestDB ci cs doMigrate f = withDBPool ci cs dbSetup $ \pool -> f pool
           DO $$
             DECLARE
                 statements CURSOR FOR
-                    SELECT c.relname AS tab, con.conname AS con
+                    SELECT c.relname AS table
+                         , con.conname AS constr
+                         , ns.nspname AS namespace
                     FROM pg_constraint con
-                    INNER JOIN pg_class c
-                      ON con.conrelid = c.oid
-                    WHERE con.contype='f';
+                    INNER JOIN pg_class c ON con.conrelid = c.oid
+                    INNER JOIN pg_namespace ns ON c.relnamespace = ns.oid
+                    WHERE con.contype='f'
+                      AND ns.nspname='public';
             BEGIN
                 FOR row IN statements LOOP
-                    EXECUTE 'ALTER TABLE ' ||  quote_ident(row.tab) ||
-                            ' ALTER CONSTRAINT ' || quote_ident(row.con) ||
+                    EXECUTE 'ALTER TABLE ' || quote_ident(row.namespace)
+                                    || '.' || quote_ident(row."table") ||
+                            ' ALTER CONSTRAINT ' || quote_ident(row.constr) ||
                             ' DEFERRABLE;' ;
                 END LOOP;
             END;
