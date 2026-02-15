@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -17,7 +18,7 @@ module NejlaCommon.Persistence.Migration
     initializeSchema,
     InitOptions (..),
     checkSchema,
-    CheckSchemaOptions(..),
+    CheckSchemaOptions (..),
     M,
     SchemaVersion,
     Migration (..),
@@ -227,48 +228,94 @@ data Migration
     script :: M ()
   }
 
--- | Sanity-check a migration list without touching the database.
+-- | Sanity-check a migration list and fixups without touching the database.
 --
--- Checks that:
+-- Checks for the main chain:
 -- * Adjacent migrations form a chain (@to@ matches next @expect@)
 -- * No two migrations share a target version
 -- * No migration has an empty target
 -- * Every migration has a description
-checkMigrationConsistency :: [Migration] -> [Text]
-checkMigrationConsistency [] = ["Empty migration list"]
-checkMigrationConsistency ms =
+--
+-- Checks for fixups:
+-- * Each fixup's @expect@ must not appear as any @to@ or @expect@ in the main chain
+-- * Each fixup's @to@ must appear as a @to@ in the main chain
+-- * No two fixups share the same @expect@
+-- * No fixup has an empty target or description
+checkMigrationConsistency :: MigrateInfo -> [Text]
+checkMigrationConsistency MigrateInfo {miMigrations = []} = ["Empty migration list"]
+checkMigrationConsistency MigrateInfo {miMigrations = ms, miFixups = fixups} =
   concat
     [ chainChecks,
       duplicateTargets,
       emptyTargets,
-      emptyDescriptions
+      emptyDescriptions,
+      fixupFromNotOrphaned,
+      fixupToNotOnChain,
+      fixupDuplicateExpects,
+      fixupEmptyTargets,
+      fixupEmptyDescriptions
     ]
   where
     -- `to` of each migration must equal `expect` of its successor
     chainChecks =
       [ [i|Chain break: migration to #{to a} followed by migration expecting #{expect b}|] ::
           Text
-        | (a, b) <- zip ms (drop 1 ms),
-          to a /= expect b
+      | (a, b) <- zip ms (drop 1 ms),
+        to a /= expect b
       ]
     -- Target versions must be unique (otherwise findMigrations is ambiguous)
     duplicateTargets =
       [ [i|Duplicate target version: #{v}|] :: Text
-        | v <-
-            map head . filter ((> 1) . length) . List.group . List.sort $
-              map to ms
+      | v <-
+          map head . filter ((> 1) . length) . List.group . List.sort $
+            map to ms
       ]
     -- Empty target would alias the pre-migration sentinel version
     emptyTargets =
       [ [i|Migration with empty target version|] :: Text
-        | any (Text.null . to) ms
+      | any (Text.null . to) ms
       ]
     -- Not strictly a consistency issue, but cheap to catch
     emptyDescriptions =
       [ [i|Migration #{expect m} -> #{to m} has empty description|] ::
           Text
-        | m <- ms,
-          Text.null (description m)
+      | m <- ms,
+        Text.null (description m)
+      ]
+
+    -- All versions mentioned in the main chain (both expect and to)
+    mainChainVersions = map expect ms ++ map to ms
+
+    -- Fixup `expect` must be orphaned (not appear anywhere in the main chain)
+    fixupFromNotOrphaned =
+      [ [i|Fixup expect version #{expect f} appears in main migration chain|] ::
+          Text
+      | f <- fixups,
+        expect f `elem` mainChainVersions
+      ]
+    -- Fixup `to` must converge back onto the main chain
+    fixupToNotOnChain =
+      [ [i|Fixup target version #{to f} is not a target in the main migration chain|] ::
+          Text
+      | f <- fixups,
+        to f `notElem` map to ms
+      ]
+    -- No two fixups from the same orphaned version
+    fixupDuplicateExpects =
+      [ [i|Duplicate fixup expect version: #{v}|] :: Text
+      | v <-
+          map head . filter ((> 1) . length) . List.group . List.sort $
+            map expect fixups
+      ]
+    fixupEmptyTargets =
+      [ [i|Fixup migration with empty target version|] :: Text
+      | any (Text.null . to) fixups
+      ]
+    fixupEmptyDescriptions =
+      [ [i|Fixup migration #{expect f} -> #{to f} has empty description|] ::
+          Text
+      | f <- fixups,
+        Text.null (description f)
       ]
 
 -- | Find relevant migrations starting from the current schema version
@@ -278,13 +325,28 @@ checkMigrationConsistency ms =
 -- * Returns an empty list if the schema version is the current target
 --   schema version, that is, it matches the "to" field in the last migration
 -- * Otherwise it returns a list of migrations to be run
-findMigrations :: SchemaVersion -> [Migration] -> Maybe [Migration]
-findMigrations v [Migration {..}]
-  | v == to = Just []
-findMigrations v ms@(Migration {..} : mss)
-  | v == expect = Just ms
-  | otherwise = findMigrations v mss
-findMigrations _ _ = Nothing
+-- * If the version is orphaned (not on the main chain), checks fixup
+--   migrations for a path back onto the chain
+findMigrations :: SchemaVersion -> MigrateInfo -> Maybe [Migration]
+findMigrations v MigrateInfo {miMigrations = ms, miFixups = fixups} =
+  case findOnChain v ms of
+    Just result -> Just result
+    Nothing ->
+      -- Version not on main chain; check fixups
+      case List.find (\f -> expect f == v) fixups of
+        Just fixup ->
+          -- The fixup's `to` is on the main chain, find remaining migrations from there
+          case findOnChain (to fixup) ms of
+            Just remaining -> Just (fixup : remaining)
+            Nothing -> Nothing -- shouldn't happen if consistency checks passed
+        Nothing -> Nothing
+  where
+    findOnChain v' [Migration {..}]
+      | v' == to = Just []
+    findOnChain v' ms'@(Migration {..} : mss)
+      | v' == expect = Just ms'
+      | otherwise = findOnChain v' mss
+    findOnChain _ _ = Nothing
 
 runMigrations :: Text -> SchemaVersion -> [Migration] -> MM ()
 runMigrations _ v [] =
@@ -338,6 +400,28 @@ data MigrateInfo
     miRevision :: Text,
     -- | Migrations to bring database to latest schema
     miMigrations :: [Migration],
+    -- | Fixup migrations from orphaned schema versions back onto the main chain.
+    --
+    --   When a broken migration has been deployed
+    --
+    --   1. Fix the migration in the codebase and rename its target version
+    --      (e.g. @"5"@ becomes @"5-fixed"@), so there is no ambiguity between
+    --      the broken and corrected schemas.
+    --   2. Fresh deployments now get the correct schema via the fixed migration.
+    --   3. Existing deployments are orphaned — their database is at version
+    --      @"5"@ which no longer exists in the main chain.
+    --   4. Add a fixup migration from @"5"@ to @"5-fixed"@ that brings the
+    --      database from the broken state to the corrected one.
+    --
+    --   At most one fixup migration will run, and it will be the first migration
+    --   to run. After that, normal migrations continue from the fixup's target.
+    --
+    --   @
+    --   Main chain:  "" -- 1 -- 2 -- 3 -- 4 -- 5-fixed -- 6
+    --                                              ^
+    --   Fixup:                                5 ---+
+    --   @
+    miFixups :: [Migration],
     -- | Optional Persistent migration for schema drift detection
     miPersistentMigration :: Maybe P.Migration,
     -- | Persistent migrations to ignore (known acceptable drift)
@@ -379,7 +463,7 @@ migrateChecked info options = do
   $logInfo [i|Current schema version: #{sv}|]
 
   -- Check migration consistency (always fatal)
-  case checkMigrationConsistency $ miMigrations info of
+  case checkMigrationConsistency info of
     [] -> return ()
     problems -> do
       $logError "Found problems with migrations:"
@@ -387,7 +471,7 @@ migrateChecked info options = do
       liftIO exitFailure
 
   -- Check for pending migrations and unknown version
-  pendingMigrations <- case findMigrations sv $ miMigrations info of
+  pendingMigrations <- case findMigrations sv info of
     Nothing -> do
       $logError "Current schema version is unknown. Cannot migrate."
       liftIO exitFailure
@@ -402,7 +486,7 @@ migrateChecked info options = do
       forM_ uscs $ \usc -> $logWarn $ " - " <> prettyUnmanagedChange usc
       case (allowUnmanagedChanges options, null pendingMigrations) of
         -- We want to migrate but unmanaged changes are blocking us
-        (False False) -> do
+        (False, False) -> do
           $logError "Use --allow-unmanaged to proceed anyway"
           liftIO exitFailure
         -- No migrations to run, so we aren't "proceeding"
@@ -475,7 +559,7 @@ initializeSchema info options = do
     Nothing -> return ()
 
   -- Check migration consistency (always fatal)
-  case checkMigrationConsistency (miMigrations info) of
+  case checkMigrationConsistency info of
     [] -> return ()
     problems -> do
       $logError "Found problems with migrations:"
@@ -484,7 +568,7 @@ initializeSchema info options = do
 
   let fromVersion = initAssumeAt options
   -- Verify fromVersion is valid (must be a known version in the migration chain)
-  case findMigrations fromVersion (miMigrations info) of
+  case findMigrations fromVersion info of
     Nothing -> do
       $logError [i|Unknown schema version: #{fromVersion}|]
       $logError "The --assume-schema version must match an 'expect' field in the migrations"
@@ -523,7 +607,7 @@ data CheckSchemaOptions = CheckSchemaOptions
 -- | Read-only schema health check. Exits with failure if any issues found.
 --   Checks: unmanaged changes, migration consistency, pending migrations,
 --   and schema drift (via Persistent).
-checkSchema :: MigrateInfo -> CheckSchemaOptions  -> M ()
+checkSchema :: MigrateInfo -> CheckSchemaOptions -> M ()
 checkSchema info options = do
   getMetaSchemaVersion >>= \case
     Nothing -> do
@@ -552,7 +636,7 @@ checkSchema info options = do
           return (not $ checkAllowUnmanagedChanges options)
 
     checkMigrationConsistency' =
-      case checkMigrationConsistency (miMigrations info) of
+      case checkMigrationConsistency info of
         [] -> return False
         problems -> do
           $logError "Found problems with migrations: "
@@ -560,7 +644,7 @@ checkSchema info options = do
           return True
 
     checkMigrationsAndDrift sv =
-      case findMigrations sv (miMigrations info) of
+      case findMigrations sv info of
         Nothing -> do
           $logError "Current schema version is unknown. Migrations won't work"
           return True

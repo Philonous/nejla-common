@@ -19,14 +19,6 @@ import Test.Hspec
 run :: P.ConnectionPool -> M a -> IO a
 run = flip runM
 
--- spec :: DBSpec
--- spec = describe "migration management" $ do
---   it "Updates the old meta schema machinery" $ runM $ do
---     P.rawExecute
---       $(sqlFile "src/NejlaCommon/Persistence/sql/old_schema_versioning.sql")
---       []
---     ensureMetaSchema
-
 -- Helpers --------------------------------------------------------------------
 
 -- | A migration whose script creates a table in public
@@ -246,7 +238,29 @@ spec = do
           expectationFailure
             "Expected exit on non-contiguous migration chain"
 
-  -- 5. Managed vs unmanaged DDL ------------------------------------------------
+  -- 5. Fixup migrations ---------------------------------------------------------
+
+  describe "fixup migrations" $ do
+    it "recovers from an orphaned schema version via fixup" $ \pool -> do
+      -- Simulate deploying a broken migration: "" -> "1" -> "2"
+      let m1 = mkNoopMigration "" "1" "first"
+          m2 = mkNoopMigration "1" "2" "second (broken)"
+      run pool $ migrate "rev" [m1, m2]
+      sv <- run pool currentSchemaVersion
+      liftIO $ sv `shouldBe` "2"
+
+      -- Now fix migration 2 in the codebase: rename target to "2.1",
+      -- add migration "2.1" -> "3", and a fixup from "2" -> "2.1"
+      let m2fixed = mkNoopMigration "1" "2.1" "second (fixed)"
+          m3 = mkNoopMigration "2.1" "3" "third"
+          irrelevant = mkNoopMigration "1.bad" "1" "irrelevant"
+          fixup = mkNoopMigration "2" "2.1" "fixup broken v2"
+          info = mkInfoWithFixups [m1, m2fixed, m3] [irrelevant, fixup]
+      run pool $ migrateChecked info defaultMigrateOptions
+      sv' <- run pool currentSchemaVersion
+      liftIO $ sv' `shouldBe` "3"
+
+  -- 6. Managed vs unmanaged DDL ------------------------------------------------
 
   describe "unmanaged schema change detection" $ do
     it "DDL inside a migration is not recorded" $ \pool -> do
@@ -295,6 +309,20 @@ spec = do
       let metaChanges = filter (\c -> uscDbSchema c == Just "_meta") changes
       liftIO $ metaChanges `shouldBe` []
 
+-- | Build a MigrateInfo with no fixups for testing the main chain
+mkInfo :: [Migration] -> MigrateInfo
+mkInfo ms = MigrateInfo
+  { miRevision = "test"
+  , miMigrations = ms
+  , miFixups = []
+  , miPersistentMigration = Nothing
+  , miIgnorePersistentMigrations = []
+  }
+
+-- | Build a MigrateInfo with fixups
+mkInfoWithFixups :: [Migration] -> [Migration] -> MigrateInfo
+mkInfoWithFixups ms fixups = (mkInfo ms) { miFixups = fixups }
+
 consistencySpec :: Spec
 consistencySpec = describe "checkMigrationConsistency" $ do
     it "accepts a valid chain" $ do
@@ -302,16 +330,16 @@ consistencySpec = describe "checkMigrationConsistency" $ do
                , mkNoopMigration "1" "2" "second"
                , mkNoopMigration "2" "3" "third"
                ]
-      checkMigrationConsistency ms `shouldBe` []
+      checkMigrationConsistency (mkInfo ms) `shouldBe` []
 
     it "rejects an empty list" $ do
-      checkMigrationConsistency [] `shouldBe` ["Empty migration list"]
+      checkMigrationConsistency (mkInfo []) `shouldBe` ["Empty migration list"]
 
     it "detects a chain break" $ do
       let ms = [ mkNoopMigration "" "1" "first"
                , mkNoopMigration "WRONG" "2" "second"
                ]
-      let errs = checkMigrationConsistency ms
+      let errs = checkMigrationConsistency (mkInfo ms)
       length errs `shouldBe` 1
       head errs `shouldSatisfy` Text.isInfixOf "Chain break"
 
@@ -319,22 +347,56 @@ consistencySpec = describe "checkMigrationConsistency" $ do
       let ms = [ mkNoopMigration "" "1" "first"
                , mkNoopMigration "1" "1" "also targets 1"
                ]
-      let errs = checkMigrationConsistency ms
+      let errs = checkMigrationConsistency (mkInfo ms)
       errs `shouldSatisfy` any (Text.isInfixOf "Duplicate target")
 
     it "detects empty target version" $ do
       let ms = [ mkNoopMigration "" "" "going nowhere" ]
-      let errs = checkMigrationConsistency ms
+      let errs = checkMigrationConsistency (mkInfo ms)
       errs `shouldSatisfy` any (Text.isInfixOf "empty target")
 
     it "detects empty description" $ do
       let ms = [ mkNoopMigration "" "1" "" ]
-      let errs = checkMigrationConsistency ms
+      let errs = checkMigrationConsistency (mkInfo ms)
       errs `shouldSatisfy` any (Text.isInfixOf "empty description")
 
     it "reports multiple problems at once" $ do
       let ms = [ mkNoopMigration "" "1" ""          -- empty description
                , mkNoopMigration "WRONG" "1" "dup"  -- chain break + duplicate target
                ]
-      let errs = checkMigrationConsistency ms
+      let errs = checkMigrationConsistency (mkInfo ms)
       length errs `shouldSatisfy` (>= 3)
+
+    -- Fixup consistency checks
+    it "accepts a valid fixup" $ do
+      let ms = [ mkNoopMigration "" "1" "first"
+               , mkNoopMigration "1" "2-fixed" "second (fixed)"
+               ]
+          fixups = [ mkNoopMigration "2" "2-fixed" "fixup broken v2" ]
+      checkMigrationConsistency (mkInfoWithFixups ms fixups) `shouldBe` []
+
+    it "rejects fixup whose expect appears in main chain" $ do
+      let ms = [ mkNoopMigration "" "1" "first"
+               , mkNoopMigration "1" "2" "second"
+               ]
+          fixups = [ mkNoopMigration "1" "2" "fixup from on-chain version" ]
+      let errs = checkMigrationConsistency (mkInfoWithFixups ms fixups)
+      errs `shouldSatisfy` any (Text.isInfixOf "appears in main migration chain")
+
+    it "rejects fixup whose target is not on main chain" $ do
+      let ms = [ mkNoopMigration "" "1" "first"
+               , mkNoopMigration "1" "2" "second"
+               ]
+          fixups = [ mkNoopMigration "bogus" "nowhere" "fixup to nowhere" ]
+      let errs = checkMigrationConsistency (mkInfoWithFixups ms fixups)
+      errs `shouldSatisfy` any (Text.isInfixOf "not a target in the main migration chain")
+
+    it "rejects duplicate fixup expect versions" $ do
+      let ms = [ mkNoopMigration "" "1" "first"
+               , mkNoopMigration "1" "2-fixed" "second (fixed)"
+               ]
+          fixups = [ mkNoopMigration "2" "2-fixed" "fixup 1"
+                   , mkNoopMigration "2" "2-fixed" "fixup 2"
+                   ]
+      let errs = checkMigrationConsistency (mkInfoWithFixups ms fixups)
+      errs `shouldSatisfy` any (Text.isInfixOf "Duplicate fixup expect")
