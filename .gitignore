@@ -4,3 +4,4 @@ dist*
 .stack-work*
 stack*.yaml.lock
 testimage
+/.task/
