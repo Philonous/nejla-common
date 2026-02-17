@@ -3,29 +3,22 @@ stages:
   # - test
 
 variables:
-  stack_args: --no-docker
+  NIX_CONFIG: "experimental-features = nix-command flakes"
+
+default:
+  image: nixos/nix
+  tags:
+    - nix
 
 build:
   stage: build
-  image: registry.nejla.com/nejla-ab/docker-images/nejla-build:84b46d4776ddc919cb4313f80fc1b8ded2a67622
   script:
-    - make build
-
-  parallel:
-    matrix:
-      - resolver:
-        - lts18
-        - lts19
-        - lts22
-
+    - >
+      nix develop .#ci --command bash -c "
+      cabal update &&
+      task build &&
+      task docs
+      "
   artifacts:
     paths:
-      - dist/doc
-    name: "documentation-nejlacommon-$CI_COMMIT_REF_NAME"
-    expose_as: "documentation"
-    expire_in: 1 month
-
-  cache:
-    key: ${CI_JOB_NAME}
-    paths:
-      - .stack-work
+      - dist/doc/
