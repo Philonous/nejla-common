@@ -35,6 +35,7 @@ infix 1 `shouldBe`
 shouldBe :: (Eq a, Show a, MonadIO m) => a -> a -> m ()
 shouldBe x y = withFrozenCallStack $ liftIO $ HSpec.shouldBe x y
 
+
 -- | Like Test.Hspec.Wai.post, but sets Content-Type to json
 postJ :: BS.ByteString -> BSL.ByteString -> WaiSession st SResponse
 postJ path bd =

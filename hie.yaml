@@ -1,6 +1,7 @@
 cradle:
-  stack:
+  cabal:
     - path: "./src"
-      component: "nejla-common:lib"
+      component: "lib:nejla-common"
+
     - path: "./tests"
       component: "nejla-common:test:tests"

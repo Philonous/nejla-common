@@ -430,6 +430,11 @@ data MyEnum = Foo | MyEnumBar | Baz
 
 ```
 
+# Migrations
+
+Nejla-common contains a migration management system, please see
+[Migrations.md](doc/Migrations.md) for details
+
 # Files
 
 See [Files.md](Files.md] for an explanation of source files

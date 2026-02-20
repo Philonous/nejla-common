@@ -1,0 +1,70 @@
+version: "3"
+
+vars:
+  PACKAGE: nejla-common
+
+tasks:
+  default:
+    desc: Build, generate docs, and copy to dist/
+    cmds:
+      - task: build
+      - task: docs
+
+  nejla-common.cabal:
+    sources:
+      - package.yaml
+    generates:
+      - nejla-common.cabal
+    cmds:
+      - hpack
+
+  build:
+    desc: Build library and test suites (without running tests)
+    deps:
+      - nejla-common.cabal
+    cmds:
+      - cabal build all --enable-tests
+    sources:
+      - src/**/*
+      - "*.cabal"
+
+  docs:
+    desc: Generate haddock and copy to dist/doc
+    deps:
+      - nejla-common.cabal
+    cmds:
+      - mkdir -p dist/doc
+      - rm -rf dist/doc/*
+      - >
+        cabal haddock --haddock-hyperlink-source --haddock-html
+        --haddock-output-dir=dist/doc
+    sources:
+      - src/**/*
+      - "*.cabal"
+
+  test:
+    desc: Run tests (starts services via docker-compose)
+    deps:
+      - build
+    cmds:
+      - docker-compose -f docker-compose.tests.yaml up -d
+      - defer: docker-compose -f docker-compose.tests.yaml down -v
+      - cabal test all
+
+  test-down:
+    desc: Tear down test services
+    cmds:
+      - docker-compose -f docker-compose.tests.yaml down -v
+
+  doc:
+    desc: Build docs and open in browser
+    deps:
+      - docs
+    cmds:
+      - xdg-open dist/doc/nejla-common/index.html
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - cabal clean
+      - rm -rf dist

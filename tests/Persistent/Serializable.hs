@@ -1,46 +1,36 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
-
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Persistent.Serializable where
 
-import           Control.Concurrent.Async
-import           Control.Exception          ( throw )
-import qualified Control.Monad.Catch        as Ex
-import           Control.Monad.Trans
-
-import           Data.Typeable              ( typeOf )
-
-import           Database.Persist
-import           Database.Persist.Sql
+import Control.Concurrent.Async
+import qualified Control.Monad.Catch as Ex
+import Control.Monad.Trans
+import Database.Persist
+import Database.Persist.Sql
 import qualified Database.PostgreSQL.Simple as Postgres
-
-import           NejlaCommon
-
-import           Persistent.Common
-
-import           Test.Hspec.Expectations
-import           Test.Tasty
-import           Test.Tasty.HUnit
-import           Test.Tasty.TH
+import NejlaCommon
+import Persistent.Common
+import Test.Hspec
 
 --------------------------------------------------------------------------------
 -- Serialization failure -------------------------------------------------------
 --------------------------------------------------------------------------------
+
 -- | Orchestrate a serialization failure
 --
 -- See <https://www.postgresql.org/docs/9.5/static/transaction-iso.html#XACT-SERIALIZABLE>
-serializableError :: MonadIO m
-                  => Bool -- ^ Enable retries
-                  -> ConnectionPool
-                  -> m ()
+serializableError ::
+  (MonadIO m) =>
+  -- | Enable retries
+  Bool ->
+  ConnectionPool ->
+  m ()
 serializableError retry pool = do
   -- "Baton" is a
   (b1, b2) <- mkBatons
@@ -79,41 +69,43 @@ serializableError retry pool = do
       -- Here thread two changes the data we just read, leading to a
       -- serialization anomaly
       takeBaton baton
-      _ <- insert Foo
-                  { fooClass = 2
-                  , fooValue = round s
-                  }
+      _ <-
+        insert
+          Foo
+            { fooClass = 2,
+              fooValue = round s
+            }
       commit
       passBaton baton
 
     thread2 baton = runThread $ do
       takeBaton baton
       s <- getSum 2
-      _ <- insert Foo
-                  { fooClass = 1
-                  , fooValue = round s
-                  }
+      _ <-
+        insert
+          Foo
+            { fooClass = 1,
+              fooValue = round s
+            }
       commit
       passBaton baton
 
--- | Check that we really are producing a serialization failure
-case_serializable_error :: IO ()
-case_serializable_error =
-  withDB (serializableError False)
-  `shouldThrow` (\(ExceptionInLinkedThread _ mbE) ->
-                 case Ex.fromException mbE of
-                     Just (DBError mbPgError)
-                       | Just e <- Ex.fromException mbPgError ->
-                         Postgres.sqlState e == "40001"
-                     _ -> throw mbE)
+spec :: DBSpec
+spec = sequential . withDefaultSetup $
+  describe "serializable" $ do
+    it "can produce a serialization error" $ \pool -> do
+      serializableError False pool
+        `shouldThrow` ( \(ExceptionInLinkedThread _ mbE) ->
+                          case Ex.fromException mbE of
+                            Just (DBError mbPgError) ->
+                              case Ex.fromException mbPgError ::
+                                     Maybe Postgres.SqlError of
+                                Just e -> Postgres.sqlState e == "40001"
+                                Nothing -> False
+                            _ -> False
+                      )
 
--- | Check that we successfully retry the transaction when a serialization
--- failure occurs
-case_serializable_retries :: IO ()
-case_serializable_retries = withDB $ \pool -> liftIO $ do
-  serializableError True pool
-  ls <- run readCommitted 0 pool $ selectList [] []
-  (entityVal <$> ls) `shouldBe` [ Foo 1 3, Foo 2 5, Foo 1 5, Foo 2 8 ]
-
-tests :: TestTree
-tests = $testGroupGenerator
+    it "successfully retris on serialization failure" $ \pool -> do
+      serializableError True pool
+      ls <- run readCommitted 0 pool $ selectList [] []
+      (entityVal <$> ls) `shouldBe` [Foo 1 3, Foo 2 5, Foo 1 5, Foo 2 8]

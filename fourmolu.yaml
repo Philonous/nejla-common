@@ -1,0 +1,6 @@
+indentation: 2
+column-limit: 100
+function-arrows: leading
+let-style: inline
+haddock-style: single-line
+respectful: false

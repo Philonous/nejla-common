@@ -32,7 +32,7 @@ import qualified Data.List                        as List
 import           Data.Map.Strict                  ( Map )
 import qualified Data.Map.Strict                  as Map
 import           Data.Maybe                       ( fromMaybe )
-import           Data.String.Interpolate.IsString ( i )
+import           Data.String.Interpolate          ( i )
 import           Data.Text                        ( Text )
 import           Data.Time.Clock                  ( getCurrentTime )
 import qualified Data.Time.Clock                  as Time
