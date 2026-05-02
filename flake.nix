@@ -9,7 +9,7 @@
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
-      ghcVersion = "912";
+      ghcVersion = "9103";
       haskell = pkgs.haskell.packages."ghc${ghcVersion}";
 
       # Dependencies to build
@@ -17,6 +17,7 @@
         pkgs.gnumake
         pkgs.go-task
         pkgs.postgresql_17
+        pkgs.postgresql_17.pg_config
         pkgs.zlib
         pkgs.pkg-config
         haskell.ghc
@@ -29,12 +30,26 @@
         haskell.haskell-language-server
         haskell.ormolu
       ];
+
+      stack-wrapped = pkgs.symlinkJoin {
+          name = "stack";
+          paths = [ pkgs.stack ];
+          buildInputs = [ pkgs.makeWrapper ];
+          postBuild = ''
+            wrapProgram $out/bin/stack \
+              --add-flags "\
+                --no-nix \
+                --system-ghc \
+                --no-install-ghc \
+              "
+          '';
+        };
     in
       {
         devShells.${system} = {
           # Development shell
           default = pkgs.mkShell {
-            buildInputs = buildDeps ++ devDeps;
+            buildInputs = buildDeps ++ devDeps ++ [stack-wrapped];
             # Local dev probably has this set up anyway, but it doesn't hurt
             LOCALE_ARCHIVE = "${pkgs.glibcLocales}/lib/locale/locale-archive";
             LANG = "en_US.UTF-8";

@@ -62,7 +62,7 @@ library
     , configurator
     , containers
     , data-default
-    , esqueleto <3.6
+    , esqueleto >=3.6
     , exceptions >=0.8
     , fast-logger
     , foldl
@@ -155,7 +155,7 @@ test-suite tests
     , configurator
     , containers
     , data-default
-    , esqueleto <3.6
+    , esqueleto >=3.6
     , exceptions
     , fast-logger
     , formatting

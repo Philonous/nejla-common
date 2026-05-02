@@ -1,0 +1,11 @@
+resolver: lts-24.42
+packages:
+flags:
+  nejla-common:
+    new-singletons: true
+
+extra-package-dbs: []
+
+docker:
+  enable: false
+  image: nejla/haskell-build
