@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.38.3.
+-- This file has been generated from package.yaml by hpack version 0.38.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -12,7 +12,7 @@ category:       Development
 homepage:       https://github.com/nejla/nejla-common
 maintainer:     info@nejla.com
 copyright:      Nejla AB,
-                2014-2021
+                2014-2026
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
