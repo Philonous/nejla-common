@@ -870,21 +870,21 @@ foreignKeyR :: (ForeignKey a b)
             => SqlExpr (Entity a)
             -> SqlExpr (Maybe (Entity b))
             -> SqlExpr (Value Bool)
-foreignKeyR x y = withForeignPairs $ \xk yk -> just (x ^. xk) ==. y ?. yk
+foreignKeyR x y = withForeignPairs $ \xk yk -> just' (x ^. xk) ==. y ??. yk
 
 -- | 'foreignKey' for 'LeftOuterJoin'
 foreignKeyL :: (ForeignKey a b)
             => SqlExpr (Maybe (Entity a))
             -> SqlExpr (Entity b)
             -> SqlExpr (Value Bool)
-foreignKeyL x y = withForeignPairs $ \xk yk -> (x ?. xk) ==. just (y ^. yk)
+foreignKeyL x y = withForeignPairs $ \xk yk -> (x ??. xk) ==. just' (y ^. yk)
 
 -- | 'foreignKey' for 'FullOuterJoin'
 foreignKeyLR :: (ForeignKey a b)
              => SqlExpr (Maybe (Entity a))
              -> SqlExpr (Maybe (Entity b))
              -> SqlExpr (Value Bool)
-foreignKeyLR x y = withForeignPairs $ \xk yk -> (x ?. xk) ==. (y ?. yk)
+foreignKeyLR x y = withForeignPairs $ \xk yk -> (x ??. xk) ==. (y ??. yk)
 
 -- | Compare an entity field to a Haskell 'Maybe' value. NOTE: Simply using
 -- @==.@ does __not__ work! @NULL ==. Nothing@ will evaluate to @NULL@!
@@ -893,7 +893,7 @@ mbEq :: (PersistField typ)
      -> Maybe typ
      -> SqlExpr (Value Bool)
 mbEq v1 Nothing = isNothing v1
-mbEq v1 (Just v2) = v1 ==. just (val v2)
+mbEq v1 (Just v2) = v1 ==. just' (val v2)
 
 -- | Like foreignKeyL, but also matches if the foreign reference is NULL
 foreignKeyLMaybe :: (ForeignKey a b)
@@ -901,7 +901,7 @@ foreignKeyLMaybe :: (ForeignKey a b)
                  -> SqlExpr (Entity b)
                  -> SqlExpr (Value Bool)
 foreignKeyLMaybe x y = withForeignPairs $ \xk yk ->
-  orL [ isNothing (x ?. xk), x ?. xk ==. just (y ^. yk) ]
+  orL [ isNothing (x ??. xk), x ??. xk ==. just' (y ^. yk) ]
 
 -- | Like foreignKeyR, but also matches if the target key field is NULL
 foreignKeyRMaybe :: (ForeignKey a b)
@@ -909,7 +909,7 @@ foreignKeyRMaybe :: (ForeignKey a b)
                  -> SqlExpr (Maybe (Entity b))
                  -> SqlExpr (Value Bool)
 foreignKeyRMaybe x y = withForeignPairs $ \xk yk ->
-  orL [ isNothing (y ?. yk), just (x ^. xk) ==. y ?. yk ]
+  orL [ isNothing (y ??. yk), just' (x ^. xk) ==. y ??. yk ]
 
 -- | Like foreignKeyLR, but also matches if foreign reference or target key are
 -- null
@@ -918,7 +918,7 @@ foreignKeyLRMaybe :: (ForeignKey a b)
                   -> SqlExpr (Maybe (Entity b))
                   -> SqlExpr (Value Bool)
 foreignKeyLRMaybe x y = withForeignPairs $ \xk yk ->
-  orL [ isNothing (x ?. xk), isNothing (y ?. yk), x ?. xk ==. y ?. yk ]
+  orL [ isNothing (x ??. xk), isNothing (y ??. yk), x ??. xk ==. y ??. yk ]
 
 -- | ON for a foreign key pair
 --

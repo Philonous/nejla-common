@@ -1,12 +1,12 @@
 name: nejla-common
-version: '0.1.0.0'
+version: "0.1.0.0"
 synopsis: Common functionality for Nejla Reference Architecture applications
 description: Common functionality for Nejla Reference Architecture applications.
 category: Development
 maintainer: info@nejla.com
 copyright:
   - Nejla AB
-  - '2014-2021'
+  - "2014-2026"
 license: BSD3
 homepage: https://github.com/nejla/nejla-common
 
@@ -35,7 +35,7 @@ dependencies:
   - configurator
   - containers
   - data-default
-  - esqueleto < 3.6
+  - esqueleto >= 3.6
   - fast-logger
   - HUnit
   - insert-ordered-containers
