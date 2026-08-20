@@ -41,6 +41,7 @@ library
       NejlaCommon.Sendmail
       NejlaCommon.Servant.ByteStream
       NejlaCommon.Test
+      NejlaCommon.Test.Api
       NejlaCommon.Test.Expectation
       NejlaCommon.Test.Golden
       NejlaCommon.Test.Json

@@ -1,3 +1,4 @@
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -23,6 +24,9 @@ import           Test.HUnit.Lang
 import qualified Test.Hspec                as HSpec
 import qualified Test.Hspec.Wai            as Wai
 import           Test.Hspec.Wai            hiding ( post, put )
+import Data.String.Interpolate (i)
+import qualified Data.List as List
+import Test.HUnit (assertFailure)
 
 -- | Lifted exceptions-based failure
 failure :: MonadIO m => String -> m a
@@ -122,3 +126,24 @@ shouldReturnA_
 shouldReturnA_ f prx = withFrozenCallStack $ do
   _ <- f `shouldReturnA` prx
   return ()
+
+-- | Assert equality up to order and duplicates (i.e. equal as mathematical sets)
+infix 1 `shouldSetEqual`
+
+shouldSetEqual :: (Show a, MonadIO m, Ord a) => [a] -> [a] -> m ()
+shouldSetEqual xs ys =
+  liftIO $ List.sort xs `shouldBe` List.sort ys
+
+infix 1 `shouldSatisfy`
+
+shouldSatisfy :: (MonadIO m, Show a) => a -> (a -> Bool) -> m ()
+shouldSatisfy x p = liftIO $ x `HSpec.shouldSatisfy` p
+
+infix 1 `shouldFloatEqual`
+
+shouldFloatEqual :: (Ord a, Fractional a, Show a, MonadIO m) => a -> a -> m ()
+shouldFloatEqual x y =
+  when (abs (x - y) > 1E-6) $
+    liftIO $
+      assertFailure
+        [i|Difference greater than 10^-6, expected #{show y} but got #{show x}|]
