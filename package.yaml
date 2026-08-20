@@ -84,27 +84,28 @@ library:
     - NejlaCommon.Config
     - NejlaCommon.Helpers
     - NejlaCommon.JSON
+    - NejlaCommon.OpenApi
+    - NejlaCommon.OpenApi.Nullable
+    - NejlaCommon.OpenApi.Operation
     - NejlaCommon.Orphans
-    - NejlaCommon.Sendmail
-    - NejlaCommon.Test
-    - NejlaCommon.Test.Postgres
-    - NejlaCommon.Test.Json
-    - NejlaCommon.Test.Logging
-    - NejlaCommon.Test.Expectation
     - NejlaCommon.Persistence
-    - NejlaCommon.Persistence.Util
     - NejlaCommon.Persistence.Compat
     - NejlaCommon.Persistence.Migration
     - NejlaCommon.Persistence.Migration.CLI
     - NejlaCommon.Persistence.SqlStatistics
-    - NejlaCommon.OpenApi
-    - NejlaCommon.OpenApi.Operation
-    - NejlaCommon.OpenApi.Nullable
+    - NejlaCommon.Persistence.Util
+    - NejlaCommon.Sendmail
     - NejlaCommon.Servant.ByteStream
+    - NejlaCommon.Test
+    - NejlaCommon.Test.Expectation
+    - NejlaCommon.Test.Golden
+    - NejlaCommon.Test.Json
+    - NejlaCommon.Test.Logging
+    - NejlaCommon.Test.Postgres
   dependencies:
     - base >=4.7 && <5.0
+    - Diff
     - async
-    - optparse-applicative
     - binary
     - case-insensitive >=1.2
     - exceptions >=0.8
@@ -118,7 +119,9 @@ library:
     - microstache
     - mime-mail
     - mtl >=2.2
+    - optparse-applicative
     - path-pieces
+    - pretty-simple
     - process
     - random
     - random-shuffle
