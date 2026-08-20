@@ -37,6 +37,7 @@ library
       NejlaCommon.Persistence.Migration.CLI
       NejlaCommon.Persistence.SqlStatistics
       NejlaCommon.Persistence.Util
+      NejlaCommon.RateLimiter
       NejlaCommon.Sendmail
       NejlaCommon.Servant.ByteStream
       NejlaCommon.Test
@@ -109,6 +110,7 @@ library
     , time >=1.5
     , transformers
     , transformers-base
+    , unliftio
     , unliftio-core
     , unordered-containers
     , uuid
